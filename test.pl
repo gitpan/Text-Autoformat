@@ -8,7 +8,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..63\n"; }
+BEGIN { $| = 1; print "1..64\n"; }
 END {print "not ok 1\n" unless $loaded;}
 my $testnum = 1;
 sub teststr(&$) # (&sub, $retval)
@@ -28,7 +28,6 @@ print "ok 1\n";
 ######################### End of black magic.
 
 START:
-
 
 
 # ZERO-WIDTH FIELD SEPARATOR
@@ -447,3 +446,16 @@ q{
       </A>
    </B>
 };
+
+
+
+# OBJECTS WHICH STRINGIFY
+teststr { form("<<<", Stringify->new) }
+"foo\n";
+
+package Stringify;
+use overload '""' => sub { return "foo" };
+sub new {
+  return bless {}, shift;
+}
+

@@ -2,6 +2,6 @@
 use ExtUtils::MakeMaker;
 WriteMakefile(
 		NAME	=> 'Text::Autoformat',
-		VERSION => '1.03',
+		VERSION => '1.04',
 
 	     );

@@ -26,3 +26,24 @@ Revision history for Perl extension Text::Autoformat.
 
         - Added separator handling to autoformat -- also fixes
           underlining of heading (thanks very much Simon)
+
+
+1.04	Tue Dec  5 10:31:22 2000
+
+	- Limited numerical bullets to 3 digits.
+	  This stops autoformat from misclassifying orphaned years such as
+	  2001.
+
+	- Added new abbreviations
+
+	- Doc patch on numerical formatting (thanks Andy)
+
+	- Major bug fixes to renumbering mechanism
+
+	- Turned off renumbering in quoted text.
+
+	- Added correct autostringification of autostringifying objects
+	  passed to &form. (Thanks Leon)
+
+	- Cleaned up "evil" exporting code left over from testing
+	  (Thanks Rick)

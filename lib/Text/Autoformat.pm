@@ -1,14 +1,14 @@
 package Text::Autoformat;
 
-use strict; use vars qw($VERSION @ISA @EXPORT_OK); use Carp;
+use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.03';
+$VERSION = '1.04';
 
 require Exporter;
 
 @ISA = qw(Exporter);
-
-@EXPORT_OK = qw( autoformat form tag break_with break_wrap break_TeX);
+@EXPORT = qw( autoformat );
+@EXPORT_OK = qw( form tag break_with break_wrap break_TeX );
 
 
 my $IGNORABLES = join "|", qw {
@@ -51,8 +51,7 @@ sub import
 				 $ljustified, $bjustified,
 				 $lfieldmark, $bfieldmark);
 
-	no strict 'refs';
-	foreach (@EXPORT_OK) { *{caller() . "::$_"} = \&$_ }
+	Text::Autoformat->export_to_level(1, @_);
 }
 
 ###### USEFUL TOOLS ######################################
@@ -355,6 +354,10 @@ sub form
 		{
 			splice @_, $nextarg, 1, \$_[$nextarg];
 		}
+                elsif ($ref[$nextarg] ne 'HASH' and $ref[$nextarg] ne 'SCALAR')
+                {
+                       splice @_, $nextarg, 1, \"$next";
+                }
 	}
 
 	my $header = $config->{header}->(${$config->{pagenum}});
@@ -520,7 +523,7 @@ sub invert($)
 	return $inversion;
 }
 
-sub tag(@_)	# ($tag, $text; $opt_endtag)
+sub tag		# ($tag, $text; $opt_endtag)
 {
 	my ($tagleader,$tagindent,$ldelim,$tag,$tagargs,$tagtrailer) = 
 		( $_[0] =~ /\A((?:[ \t]*\n)*)([ \t]*)(\W*)(\w+)(.*?)(\s*)\Z/ );
@@ -775,13 +778,14 @@ sub autoformat	# ($text, %args)
 	{
 		my $sig = $para->{presig} . $para->{hang}->signature();
 		push @{$sigs{$sig}{hangref}}, $para;
-		push @{$sigs{$sig}{hangfields}}, $para->{hang}->fields();
+		$sigs{$sig}{hangfields} = $para->{hang}->fields()-1
+			unless defined $sigs{$sig}{hangfields};
 	}
 
 	while (my ($sig,$val) = each %sigs)
 	{
 		next unless $sig =~ /rom/;
-		field: for my $field ( 0..@{$val->{hangfields}} )
+		field: for my $field ( 0..$val->{hangfields} )
 		{
 			my $romlen = 0;
 			foreach my $para ( @{$val->{hangref}} )
@@ -808,15 +812,18 @@ sub autoformat	# ($text, %args)
 		}
 	}
 
-	my $prev;
+	my %prev;
 	for my $para ( @paras )
 	{
-		$para->{hang}->incr($prev);
-		$prev = $para->{hang} unless $para->{hang}->empty;
+		my $sig = $para->{presig} . $para->{hang}->signature();
+		unless ($para->{quoter}) {
+			$para->{hang}->incr($prev{""}, $prev{$sig});
+			$prev{""} = $prev{$sig} = $para->{hang}
+				unless $para->{hang}->empty;
+		}
 			
 		# COLLECT MAXIMAL HANG LENGTHS BY SIGNATURE
 
-		my $sig = $para->{presig} . $para->{hang}->signature();
 		my $siglen = $para->{hang}->length();
 		$sigs{$sig}{hanglen} = $siglen
 			if ! $sigs{$sig}{hanglen} ||
@@ -906,8 +913,11 @@ sub entitle {
 }
 
 my $abbrev = join '|', qw{
-	etc[.]   pp[.]   ph[.]?d[.]
- (^[^a-z]*([a-z][.])+)
+	etc[.]	pp[.]	ph[.]?d[.]	U[.]S[.]
+};
+
+my $gen_abbrev = join '|', $abbrev, qw{
+ 	(^[^a-z]*([a-z][.])+)
 };
 
 my $term = q{(?:[.]|[!?]+)};
@@ -930,7 +940,7 @@ sub ensentence {
 		$str =~ s/([a-z])/uc $1/ie;
 		$brsent = $str =~ /^[[(]/;
 	}
-	$eos = $str !~ /($abbrev)[^a-z]*\s/i
+	$eos = $str !~ /($gen_abbrev)[^a-z]*\s/i
 	    && $str =~ /[a-z][^a-z]*$term([^a-z]*)\s/
 	    && !($1=~/[])]/ && !$brsent);
 	$str =~ s/\s+$/$trailer/ if $eos && $trailer;
@@ -1030,8 +1040,8 @@ my $sbr = q/])>/;
 my $ows = q/[ \t]*/;
 my %close = ( '[' => ']', '(' => ')', '<' => '>', "" => '' );
 
-my $hangPS      = qq{(?:(?:p\\.?)+s\\.?(?:[ \\t]*:)?)};
-my $hangNB      = qq{(?:n\\.?b\\.?(?:[ \\t]*:)?)};
+my $hangPS      = qq{(?i:ps:|(?:p\\.?)+s\\.?(?:[ \\t]*:)?)};
+my $hangNB      = qq{(?i:n\\.?b\\.?(?:[ \\t]*:)?)};
 my $hangword    = qq{(?:(?:Note)[ \\t]*:)};
 my $hangbullet  = qq{[*.+-]};
 my $hang        = qq{(?:(?i)(?:$hangNB|$hangword|$hangbullet)(?=[ \t]))};
@@ -1052,6 +1062,9 @@ sub new {
 		local $^W;
 		my $cut;
 		while (length $_[1]) {
+			last if $_[1] =~ m#\A($ows)($abbrev)#
+			     && (length $1 || !@vals);	# ws-separated or first
+
 			$cut = $origlen - length $_[1];
 			my $pre = $_[1] =~ s#\A($ows$pbr$ows)## ? $1 : "";
 			my $val =  $_[1] =~ s#\A($num)##  && { type=>'num', val=>$1 }
@@ -1070,20 +1083,33 @@ sub new {
 			$_[1] = substr($orig,pop(@vals)->{cut});
 		}
 	}
-	return NullHang->new unless @vals;
+	# check for orphaned years...
+	if (@vals==1 && $vals[0]->{type} eq 'num'
+		     && $vals[0]->{val} >= 1000
+		     && $vals[0]->{post} eq '.')  {
+		$_[1] = substr($orig,pop(@vals)->{cut});
+
+        }
+	return NullHang->new if !@vals;
 	bless \@vals, $class;
 } 
 
 sub incr {
 	local $^W;
-	my ($self, $prev) = @_;
+	my ($self, $prev, $prevsig) = @_;
 	my $level;
 	# check compatibility
 
 	return unless $prev && !$prev->empty;
+
 	for $level (0..(@$self<@$prev ? $#$self : $#$prev)) {
-		 return if $self->[$level]{type} ne $prev->[$level]{type}
+		if ($self->[$level]{type} ne $prev->[$level]{type}) {
+			return if @$self<=@$prev;	# no incr if going up
+			$prev = $prevsig;
+			last;
+		}
 	}
+	return unless $prev && !$prev->empty;
 	if ($self->[0]{type} eq 'ps') {
 		my $count = 1 + $prev->[0]{val} =~ s/(p[.]?)/$1/gi;
 		$prev->[0]{val} =~ /^(p[.]?).*(s[.]?[:]?)/;
@@ -1195,8 +1221,8 @@ Text::Autoformat - Automatic and manual text wrapping and reformating formatting
 
 =head1 VERSION
 
-This document describes version 1.03 of Text::Autoformat,
-released October 26, 2000.
+This document describes version 1.04 of Text::Autoformat,
+released December  5, 2000.
 
 =head1 SYNOPSIS
 
@@ -2021,7 +2047,7 @@ its final value will be unchanged.
 The ">>>.<<<" and "]]].[[[" field specifiers may be used to format
 numeric values about a fixed decimal place marker. For example:
 
-        print form '(>>>>>.<<)', <<EONUMS;
+        print form '(]]]]].[[)', <<EONUMS;
                    1
                    1.0
                    1.001
@@ -2052,7 +2078,7 @@ by giving the configuration option 'numeric' a value that matches
 /\bAllPlaces\b/i. For example:
 
         print form { numeric => AllPlaces },
-                   '(>>>>>.<<)', <<'EONUMS';
+                   '(]]]]].[[)', <<'EONUMS';
                    1
                    1.0
         EONUMS
@@ -2075,7 +2101,7 @@ ignored. For example:
 
 
         print form { numeric => 'SkipNaN' }
-                   '(>>>>>.<<)',
+                   '(]]]]].[[)',
                    <<EONUMS;
                    1
                    two three

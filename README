@@ -1,5 +1,5 @@
 ==============================================================================
-                 Release of version 1.03 of Text::Autoformat
+                 Release of version 1.04 of Text::Autoformat
 ==============================================================================
 
 
@@ -32,30 +32,26 @@ COPYRIGHT
 
 ==============================================================================
 
-CHANGES IN VERSION 1.03
+CHANGES IN VERSION 1.04
 
 
-	- Tweaked test.pl and POD
+	- Limited numerical bullets to 3 digits.
+	  This stops autoformat from misclassifying orphaned years such as
+	  2001.
 
-	- required 5.005
-	  (module uses funky stuff that's broken in earlier perls - sorry Dave)
+	- Added new abbreviations
 
-	- added break_TeX subroutine to take advantage of TeX::Hyphen
-	  if it's installed.
+	- Doc patch on numerical formatting (thanks Andy)
 
-	- documented "sticky" config mode
+	- Major bug fixes to renumbering mechanism
 
-	- Changed semantics of footer generation slightly (see doc)
+	- Turned off renumbering in quoted text.
 
-	- fixed niggle in widow handling under full justification
+	- Added correct autostringification of autostringifying objects
+	  passed to &form. (Thanks Leon)
 
-	- Added pagenum option to control page numbering
-
-	- Added three-part hash specification option for headers and footers
-	  (thanks Chaim)
-
-        - Added separator handling to autoformat -- also fixes
-          underlining of heading (thanks very much Simon)
+	- Cleaned up "evil" exporting code left over from testing
+	  (Thanks Rick)
 
 
 ==============================================================================
