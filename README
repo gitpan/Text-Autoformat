@@ -1,5 +1,5 @@
 ==============================================================================
-                 Release of version 1.04 of Text::Autoformat
+                 Release of version 1.07 of Text::Autoformat
 ==============================================================================
 
 
@@ -32,26 +32,31 @@ COPYRIGHT
 
 ==============================================================================
 
-CHANGES IN VERSION 1.04
+CHANGES IN VERSION 1.07
 
 
-	- Limited numerical bullets to 3 digits.
-	  This stops autoformat from misclassifying orphaned years such as
-	  2001.
+	- Tweaked pod to remove invalid markup
 
-	- Added new abbreviations
+	- Fixed left justification of last line of fully justified text
+	  (thanks Elias)
 
-	- Doc patch on numerical formatting (thanks Andy)
+	- Devolved &from and &tag to Text::Reform
 
-	- Major bug fixes to renumbering mechanism
+	- Fixed incorrect handling of stringifiable objects (thanks dLux)
 
-	- Turned off renumbering in quoted text.
+	- Fixed bugs on null input (now short-circuits)
 
-	- Added correct autostringification of autostringifying objects
-	  passed to &form. (Thanks Leon)
+	- Fixed unwarranted trimming of trailing newlines (thanks Mark)
 
-	- Cleaned up "evil" exporting code left over from testing
-	  (Thanks Rick)
+	- Added C<renumber> option to control renumbering
+
+	- Preserved capitalization of abbreviations under case changes
+	  (thanks Alex)
+
+	- Added "autocentre" flag to switch off auto-centring of paras
+
+	- Added "ignore" flag to control which paragraphs are reformatted
+	  (thanks Tony)
 
 
 ==============================================================================
@@ -59,8 +64,5 @@ CHANGES IN VERSION 1.04
 AVAILABILITY
 
 Text::Autoformat has been uploaded to the CPAN
-and is also available from:
-
-	http://www.csse.monash.edu.au/~damian/CPAN/Text-Autoformat.tar.gz
 
 ==============================================================================

@@ -47,3 +47,29 @@ Revision history for Perl extension Text::Autoformat.
 
 	- Cleaned up "evil" exporting code left over from testing
 	  (Thanks Rick)
+
+
+1.07	Wed Apr  2 04:45:05 2003
+
+	- Tweaked pod to remove invalid markup
+
+	- Fixed left justification of last line of fully justified text
+	  (thanks Elias)
+
+	- Devolved &from and &tag to Text::Reform
+
+	- Fixed incorrect handling of stringifiable objects (thanks dLux)
+
+	- Fixed bugs on null input (now short-circuits)
+
+	- Fixed unwarranted trimming of trailing newlines (thanks Mark)
+
+	- Added C<renumber> option to control renumbering
+
+	- Preserved capitalization of abbreviations under case changes
+	  (thanks Alex)
+
+	- Added "autocentre" flag to switch off auto-centring of paras
+
+	- Added "ignore" flag to control which paragraphs are reformatted
+	  (thanks Tony)

@@ -8,7 +8,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..64\n"; }
+BEGIN { $| = 1; print "1..63\n"; }
 END {print "not ok 1\n" unless $loaded;}
 my $testnum = 1;
 sub teststr(&$) # (&sub, $retval)
@@ -21,7 +21,7 @@ sub teststr(&$) # (&sub, $retval)
 	     print "not " unless $res eq $exp;
 	     print "ok $testnum\n"; };
 }
-use Text::Autoformat qw{ form tag break_wrap break_with };
+use Text::Reform qw{ form tag break_wrap break_with };
 $loaded = 1;
 print "ok 1\n";
 
@@ -230,18 +230,6 @@ SCOPED:{
 	teststr { form "<"x10, $str } "a b c     \n";
 	teststr { form {squeeze=>0}, "<"x10, $str } "$str    \n";
 	teststr { form "<"x10, $str } "a b c     \n";
-}
-
-NO_USE:{
-	my $match = "Bad";
-	local $SIG{__WARN__} = sub
-	{
-		$match = "Good" if $_[0] =~ /^Configuration specified at .* was not used before it went out of scope/;
-	};
-	SCOPED:{
-		my $scope = form { squeeze=>1 };
-	}
-	teststr {$match} "Good";
 }
 
 # HYPHENATION

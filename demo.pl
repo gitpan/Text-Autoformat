@@ -1,16 +1,17 @@
-#! /usr/local/bin/perl -w
+#! /usr/local/bin/perl -ws
 
 # TRY DOING *THIS* WITH format!
 
-use Text::Autoformat qw(form break_with);
+use Text::Reform qw(form break_with);
 
 my $text = join "", map "line $_\n", (1..20);
 
 @lines = form { 
-	pagelen=>6,
-	header => sub { "Page $_[0]\n" },
-	footer => sub { return "" if $_[1];
-			"-"x50 . "\n" . form ">"x50, "...".($_[0]+1);
+	pagelen=>9,
+	header => sub { "Page $_[0]\n"."="x50 },
+	footer => sub { my ($pagenum, $lastpage) = @_;
+			return "" if $lastpage;
+			return "-"x50 . "\n" . form ">"x50, "...".($pagenum+1);
 		      },
 	pagefeed => "\n"x10
 	},

@@ -2,9 +2,11 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.04';
+$VERSION = '1.07';
 
 require Exporter;
+
+use Text::Reform qw( form tag break_with break_wrap break_TeX );
 
 @ISA = qw(Exporter);
 @EXPORT = qw( autoformat );
@@ -22,547 +24,10 @@ my $IGNORABLES = join "|", qw {
 };
 
 
-my @bspecials = qw( [ | ] );
-my @lspecials = qw( < ^ > );
-my $ljustified = '[<]{2,}[>]{2,}';
-my $bjustified = '[[]{2,}[]]{2,}';
-my $bsingle    = '~+';
-my @specials = (@bspecials, @lspecials);
-my $fixed_fieldpat = join('|', ($ljustified, $bjustified,
-				$bsingle,
-				map { "\\$_\{2,}" } @specials));
-my ($lfieldmark, $bfieldmark, $fieldmark, $fieldpat, $decimal);
-my $emptyref = '';
-
-sub import
-{
-	use POSIX qw( localeconv );
-	$decimal = localeconv()->{decimal_point} || '.';
-
-	my $lnumerical = '[>]+(?:'.quotemeta($decimal).'[<]{1,})';
-	my $bnumerical = '[]]+(?:'.quotemeta($decimal).'[[]{1,})';
-
-	$fieldpat = join('|', ($lnumerical, $bnumerical,$fixed_fieldpat));
-
-	$lfieldmark = join '|', ($lnumerical, $ljustified, map { "\\$_\{2}" } @lspecials);
-	$bfieldmark = join '|', ($bnumerical, $bjustified, $bsingle, map { "\\$_\{2}" } @bspecials);
-	$fieldmark  = join '|', ($lnumerical, $bnumerical,
-				 $bsingle,
-				 $ljustified, $bjustified,
-				 $lfieldmark, $bfieldmark);
-
-	Text::Autoformat->export_to_level(1, @_);
-}
-
-###### USEFUL TOOLS ######################################
-
-#===== form =============================================#
-
-sub BAD_CONFIG { 'Configuration hash not allowed between format and data' }
-
-sub break_with
-{
-	my $hyphen = $_[0];
-	my $hylen = length($hyphen);
-	my @ret;
-	sub
-	{
-		if ($_[2]<=$hylen)
-		{
-			@ret = (substr($_[0],0,1), substr($_[0],1))
-		}
-		else
-		{
-			@ret = (substr($_[0],0,$_[1]-length($hyphen)),
-				substr($_[0],$_[1]-length($hyphen)))
-		}
-		if ($ret[0] =~ /\A\s*\Z/) { return ("",$_[0]); }
-		else { return ($ret[0].$hyphen,$ret[1]); }
-	}
-
-}
-
-sub break_wrap
-{
-	return \&break_wrap unless @_;
-	my ($text, $reqlen, $fldlen) = @_;
-	if ($reqlen==$fldlen) { $text =~ m/\A(\s*\S*)(.*)/s }
-	else                  { ("", $text) }
-}
-
-my %hyp;
-sub break_TeX
-{
-	my $file = $_[0] || "";
-
-	croak "Can't find TeX::Hypen module"
-		unless require "TeX/Hyphen.pm";
-
-	$hyp{$file} = TeX::Hyphen->new($file||undef)
-			|| croak "Can't open hyphenation file $file"
-		unless $hyp{$file};
-
-	return sub {
-		for (reverse $hyp{$file}->hyphenate($_[0])) {
-			if ($_ < $_[1]) {
-				return (substr($_[0],0,$_).'-',
-					substr($_[0],$_) );
-			}
-		}
-		return ("",$_[0]);
-	}
-}
-
-sub debug { print STDERR @_, "\n" if $::DEBUG || $::DEBUG }
-
-sub notempty
-{
-	my $ne = ${$_[0]} =~ /\S/;
-	debug("\tnotempty('${$_[0]}') = $ne\n");
-	return $ne;
-}
-
-sub replace($$$$)   # ($fmt, $len, $argref, $config)
-{
-	my $ref = $_[2];
-	my $text = '';
-	my $rem = $_[1];
-	my $config = $_[3];
-
-	$$ref =~ s/\A\s*//;
-	my $fmtnum = length $_[0];
-
-	if ($$ref =~ /\S/ && $fmtnum>2)
-	{
-	NUMERICAL:{
-		use POSIX qw( strtod );
-		my ($ilen,$dlen) = map {length} $_[0] =~ m/([]>]+)\Q$decimal\E([[<]+)/;
-		my ($num,$unconsumed) = strtod($$ref);
-		if ($unconsumed == length $$ref)
-		{
-			$$ref =~ s/\s*\S*//;
-			redo NUMERICAL if $config->{numeric} =~ m/\bSkipNaN\b/i
-				       && $$ref =~ m/\S/;
-			$text = '?' x $ilen . $decimal . '?' x $dlen;
-			$rem = 0;
-			return $text;
-		}
-		my $formatted = sprintf "%$fmtnum.${dlen}lf", $num;
-		$text = (length $formatted > $fmtnum)
-			? '#' x $ilen . $decimal . '#' x $dlen
-			: $formatted;
-		$text =~ s/(\Q$decimal\E\d+?)(0+)$/$1 . " " x length $2/e
-			unless $config->{numeric} =~ m/\bAllPlaces\b/i
-			    || $num =~ /\Q$decimal\E\d\d{$dlen,}$/;
-		if ($unconsumed)
-		{
-			if ($unconsumed == length $$ref)
-				{ $$ref =~ s/\A.[^0-9.+-]*// }
-			else
-				{ substr($$ref,0,-$unconsumed) = ""}
-		}
-		else            { $$ref = "" }
-		$rem = 0;
-	    }
-	}
-	else
-	{
-		while ($$ref =~ /\S/)
-		{
-			last if !$config->{fill} && $$ref=~s/\A\n//;
-			last unless $$ref =~ /\A(\s*)(\S+)(.*)\z/s;
-			my ($ws, $word, $extra) = ($1,$2,$3);
-			my $nonnl = $ws =~ /[^\n]/;
-			$ws =~ s/\n/$nonnl? "" : " "/ge if $config->{fill};
-			my $lead = ($config->{squeeze} ? ($ws ? " " : "") : $ws);
-			my $match = $lead . $word;
-			last if $text && $match =~ /\n/;
-			my $len1 = length($match);
-			if ($len1 <= $rem)
-			{
-				$text .= $match;
-				$rem  -= $len1;
-				$$ref = $extra;
-			}
-			else
-			{
-				if ($len1 > $_[1] and $rem-length($lead)>$config->{minbreak})
-				{
-					my ($broken,$left) =
-						$config->{break}->($match,$rem,$_[1]);	
-					$text .= $broken;
-					$$ref = $left.$extra;
-					$rem -= length $broken;
-				}
-				last;
-			}
-		}
-	}
-
-	unless (length $text)
-	{
-		$text = substr($$ref,0,$rem);
-		substr($$ref,0,$rem) = "";
-		$rem -= length $text;
-	}
-
-	if ( $_[0] eq 'J' && $text =~ / / && length($$ref)) 	# FULLY JUSTIFIED
-	{
-		$text = reverse $text;
-		$text =~ s/( +)/($rem-->0?" ":"").$1/ge while $rem>0;
-		$text = reverse $text;
-	}
-	elsif ( $_[0] =~ /[~<[J]/ ) 			# LEFT JUSTIFIED
-	{
-		$text .= ' ' x $rem
-	}
-	elsif ( $_[0] =~ /\>|\]/ )			# RIGHT JUSTIFIED
-	{
-		substr($text,0,0) = ' ' x $rem;
-	}
-	elsif ( $_[0] =~ /\^|\|/ )			# CENTRE JUSTIFIED
-	{
-		my $halfrem = int($rem/2);
-		substr($text,0,0) = ' ' x $halfrem;
-		$text .= ' ' x ($rem-$halfrem);
-	}
-
-	return $text;
-}
-
-my %std_config =
-(
-	header	 => sub{""},
-	footer	 => sub{""},
-	pagefeed => sub{""},
-	pagelen	 => 0,
-	pagenum	 => do { \(my $pagenum = 1 )},
-	break	 => break_with('-'),
-	minbreak => 2,
-	squeeze	 => 0,
-	numeric	 => "",
-	_used    => 1,
-);
-
-sub lcr {
-	my ($data) = @_;
-	$data->{width}  ||= 72;
-	$data->{left}   ||= "";
-	$data->{centre} ||= $data->{center}||"";
-	$data->{right}  ||= "";
-	return sub {
-		my $l = ref $data->{left} eq 'CODE'
-				? $data->{left}->(@_) : $data->{left};
-		my $c = ref $data->{centre} eq 'CODE'
-				? $data->{centre}->(@_) : $data->{centre};
-		my $r = ref $data->{right} eq 'CODE'
-				? $data->{right}->(@_) : $data->{right};
-		my $gap = int(($data->{width}-length($c))/2-length($l));
-		return $l . " " x $gap
-		     . $c . " " x ($data->{width}-length($l)-length($c)-$gap-length($r))
-		     . $r;
-	}
-}
-
-sub fix_config(\%)
-{
-	my ($config) = @_;
-	if (ref $config->{header} eq 'HASH') {
-		$config->{header} = lcr $config->{header};
-	}
-	unless (ref $config->{header} eq 'CODE') {
-		my $tmp = $config->{header}; $config->{header} = sub { $tmp }
-	}
-	if (ref $config->{footer} eq 'HASH') {
-		$config->{footer} = lcr $config->{footer};
-	}
-	unless (ref $config->{footer} eq 'CODE') {
-		my $tmp = $config->{footer}; $config->{footer} = sub { $tmp }
-	}
-	unless (ref $config->{pagefeed} eq 'CODE')
-		{ my $tmp = $config->{pagefeed}; $config->{pagefeed} = sub { $tmp } }
-	unless (ref $config->{break} eq 'CODE')
-		{ $config->{break} = break_with($config->{break}) }
-	unless (ref $config->{pagenum} eq 'SCALAR') 
-		{ my $tmp = $config->{pagenum}; $config->{pagenum} = \$tmp }
-}
-
-sub FormOpt::DESTROY
-{
-	carp "Configuration specified at $std_config{_line} was not used before it went out of scope"
-		if $^W && !$std_config{_used};
-	%std_config = %{$std_config{_prev}};
-}
-
-sub form
-{
-	my $config = {%std_config};
-	my $startidx = 0;
-	if (@_ && ref($_[0]) eq 'HASH')		# RESETTING CONFIG
-	{
-		if (@_ > 1)			# TEMPORARY RESET
-		{
-			$config = {%$config, %{$_[$startidx++]}};
-			fix_config(%$config);
-			$startidx = 1;
-		}
-		elsif (defined wantarray)	# CONTEXT BEING CAPTURED
-		{
-			$_[0]->{_prev} = { %std_config };
-			$_[0]->{_used} = 0;
-			$_[0]->{_line} = join " line ", (caller)[1..2];;
-			%{$_[0]} = %std_config = (%std_config, %{$_[0]});
-			fix_config(%std_config);
-			return bless $_[0], 'FormOpt';
-		}
-		else				# PERMANENT RESET
-		{
-			$_[0]->{_used} = 1;
-			$_[0]->{_line} = join " line ", (caller)[1..2];;
-			%std_config = (%std_config, %{$_[0]});
-			fix_config(%std_config);
-			return;
-		}
-	}
-	$std_config{_used}++;
-	my @ref = map { ref } @_;
-	my @orig = @_;
-	my $caller = caller;
-	no strict;
-
-	for my $nextarg (0..$#_)
-	{
-		my $next = $_[$nextarg];
-		if (!defined $next)
-		{
-			splice @_, $nextarg, 1, '';
-		}
-		elsif ($ref[$nextarg] eq 'ARRAY')
-		{
-			splice @_, $nextarg, 1, \join("\n", @$next)
-		}
-		elsif (!defined eval { local $SIG{__DIE__};
-				       $_[$nextarg] = $next;
-				       debug "writeable: [$_[$nextarg]]";
-				       1})
-		{
-		        debug "unwriteable: [$_[$nextarg]]";
-			my $arg = $_[$nextarg];
-			splice @_, $nextarg, 1, \$arg;
-		}
-		elsif (!$ref[$nextarg])
-		{
-			splice @_, $nextarg, 1, \$_[$nextarg];
-		}
-                elsif ($ref[$nextarg] ne 'HASH' and $ref[$nextarg] ne 'SCALAR')
-                {
-                       splice @_, $nextarg, 1, \"$next";
-                }
-	}
-
-	my $header = $config->{header}->(${$config->{pagenum}});
-	$header.="\n" if $header && substr($header,-1,1) ne "\n";
-
-	my $footer = $config->{footer}->(${$config->{pagenum}});
-	$footer.="\n" if $footer && substr($footer,-1,1) ne "\n";
-
-	my $prevfooter = $footer;
-
-	my $linecount = $header=~tr/\n/\n/ + $footer=~tr/\n/\n/;
-	my $hfcount = $linecount;
-
-	my $text = $header;
-
-	while ($startidx < @_)
-	{
-		if ($ref[$startidx]||'' eq 'HASH')
-		{
-			$config = {%$config, %{$_[$startidx++]}};
-			fix_config(%$config);
-			next;
-		}
-		my $format = ${$_[$startidx++]}||"";
-		debug("format: [$format]");
-	
-		my @parts = split /(\n|(?:\\.)+|$fieldpat)/, $format;
-		push @parts, "\n" unless @parts && $parts[-1] eq "\n";
-		my $fieldcount = 0;
-		my $filled = 0;
-		my $firstline = 1;
-		while (!$filled)
-		{
-			my $nextarg = $startidx;
-			my @data;
-			foreach my $part ( @parts )
-			{
-				if ($part =~ /\A(?:\\.)+/)
-				{
-					debug("esc literal: [$part]");
-					my $tmp = $part;
-					$tmp =~ s/\\(.)/$1/g;
-					$text .= $tmp;
-				}
-				elsif ($part =~ /($lfieldmark)/)
-				{
-					if ($firstline)
-					{
-						$fieldcount++;
-						if ($nextarg > $#_)
-							{ push @_,\$emptyref; push @ref, '' }
-						my $type = $1;
-						$type = 'J' if $part =~ /$ljustified/;
-						croak BAD_CONFIG if ($ref[$startidx] eq 'HASH');
-						debug("once field: [$part]");
-						debug("data was: [${$_[$nextarg]}]");
-						$text .= replace($type,length($part),$_[$nextarg],$config);
-						debug("data now: [${$_[$nextarg]}]");
-					}
-					else
-					{
-						$text .= ' ' x length($part);
-						debug("missing once field: [$part]");
-					}
-					$nextarg++;
-				}
-				elsif ($part =~ /($fieldmark)/ and substr($part,0,2) ne '~~')
-				{
-					$fieldcount++ if $firstline;
-					if ($nextarg > $#_)
-						{ push @_,\$emptyref; push @ref, '' }
-					my $type = $1;
-					$type = 'J' if $part =~ /$bjustified/;
-					croak BAD_CONFIG if ($ref[$startidx] eq 'HASH');
-					debug("multi field: [$part]");
-					debug("data was: [${$_[$nextarg]}]");
-					$text .= replace($type,length($part),$_[$nextarg],$config);
-					debug("data now: [${$_[$nextarg]}]");
-					push @data, $_[$nextarg];
-					$nextarg++;
-				}
-				else
-				{
-					debug("literal: [$part]");
-					my $tmp = $part;
-					$tmp =~ s/\0(\0*)/$1/g;
-					$text .= $tmp;
-					if ($part eq "\n")
-					{
-						$linecount++;
-						if ($linecount>=$config->{pagelen})
-						{
-							${$config->{pagenum}}++;
-							my $pagefeed = $config->{pagefeed}->(${$config->{pagenum}});
-							$header = $config->{header}->(${$config->{pagenum}});
-							$header.="\n" if $header && substr($header,-1,1) ne "\n";
-							$text .= $footer
-							       . $pagefeed
-							       . $header;
-							$prevfooter = $footer;
-							$footer = $config->{footer}->(${$config->{pagenum}});
-							$footer.="\n" if $footer && substr($footer,-1,1) ne "\n";
-							$linecount = $hfcount =
-								$header=~tr/\n/\n/ + $footer=~tr/\n/\n/;
-							$header = $pagefeed
-								. $header;
-						}
-					}
-				}
-				debug("\tnextarg now:  $nextarg");
-				debug("\tstartidx now: $startidx");
-			}
-			$firstline = 0;
-			$filled = ! grep { notempty $_ } @data;
-		}
-		$startidx += $fieldcount;
-	}
-
-	# ADJUST FINAL PAGE HEADER OR FOOTER AS REQUIRED
-	if ($hfcount && $linecount == $hfcount)		# UNNEEDED HEADER
-	{
-		$text =~ s/\Q$header\E\Z//;
-	}
-	elsif ($linecount && $config->{pagelen})	# MISSING FOOTER
-	{
-		$text .= "\n" x ($config->{pagelen}-$linecount)
-		       . $footer;
-		$prevfooter = $footer;
-	}
-
-	# REPLACE LAST FOOTER
-	
-	if ($prevfooter) {
-		my $lastfooter = $config->{footer}->(${$config->{pagenum}},1);
-		$lastfooter.="\n"
-			if $lastfooter && substr($lastfooter,-1,1) ne "\n";
-		substr($text, -length($prevfooter)) = $lastfooter;
-	}
-
-	# RESTORE ARG LIST
-	for my $i (0..$#orig)
-	{
-		if ($ref[$i] eq 'ARRAY')
-			{ eval { @{$orig[$i]} = map "$_\n", split /\n/, ${$_[$i]} } }
-		elsif (!$ref[$i])
-			{ eval { debug("restoring $i (".$_[$i].") to $orig[$i]");
-				 ${$_[$i]} = $orig[$i] } }
-	}
-
-	${$config->{pagenum}}++;
-	$text =~ s/[ ]+$//gm if $config->{trim};
-	return $text unless wantarray;
-	return map "$_\n", split /\n/, $text;
-}
-
-
-#==== tag ============================================#
-
-sub invert($)
-{
-	my $inversion = reverse $_[0];
-	$inversion =~ tr/{[<(/}]>)/;
-	return $inversion;
-}
-
-sub tag		# ($tag, $text; $opt_endtag)
-{
-	my ($tagleader,$tagindent,$ldelim,$tag,$tagargs,$tagtrailer) = 
-		( $_[0] =~ /\A((?:[ \t]*\n)*)([ \t]*)(\W*)(\w+)(.*?)(\s*)\Z/ );
-
-	$ldelim = '<' unless $ldelim;
-	$tagtrailer =~ s/([ \t]*)\Z//;
-	my $textindent = $1||"";
-
-	my $rdelim = invert $ldelim;
-
-	my $i;
-	for ($i = -1; -1-$i < length $rdelim && -1-$i < length $tagargs; $i--)
-	{
-		last unless substr($tagargs,$i,1) eq substr($rdelim,$i,1);
-	}
-	if ($i < -1)
-	{
-		$i++;
-		$tagargs = substr($tagargs,0,$i);
-		$rdelim = substr($rdelim,$i);
-	}
-
-	my $endtag = $_[2] || "$ldelim/$tag$rdelim";
-
-	return "$tagleader$tagindent$ldelim$tag$tagargs$rdelim$tagtrailer".
-		join("\n",map { "$tagindent$textindent$_" } split /\n/, $_[1]).
-		"$tagtrailer$tagindent$endtag$tagleader";
-
-}
-
-
-###### AUTOFORMATTING ####################################
-
 my $default_margin = 72;
 my $default_widow  = 10;
 
 $Text::Autoformat::widow_slack = 0.1;
-
-
 
 
 sub defn($)
@@ -579,22 +44,28 @@ my $quoter = qq{(?:(?i)(?:$quotechunk(?:[ \\t]*$quotechunk)*))};
 
 my $separator = q/(?:[-_]{2,}|[=#*]{3,}|[+~]{4,})/;
 
-
+use overload;
 sub autoformat	# ($text, %args)
 {
 	my ($text,%args,$toSTDOUT);
 
 	foreach ( @_ )
 	{
-		unless (ref || defined $text) { $text = $_ }
-		elsif (ref eq 'HASH') { %args = (%args, %$_) }
-		else { croak q{Usage: autoformat([text],[{options}])} }
+		if (ref eq 'HASH')
+			{ %args = (%args, %$_) }
+		elsif (!defined($text) && !ref || overload::Method($_,'""'))
+			{ $text = "$_" }
+		else {
+			croak q{Usage: autoformat([text],[{options}])}
+		}
 	}
 
 	unless (defined $text) {
 		$text = join("",<STDIN>);
 		$toSTDOUT = !defined wantarray();
 	}
+
+	return unless length $text;
 
 	$args{right}   = $default_margin unless exists $args{right};
 	$args{justify} = "" unless exists $args{justify};
@@ -603,10 +74,25 @@ sub autoformat	# ($text, %args)
 	$args{case}    = '' unless exists $args{case};
 	$args{squeeze} = 1 unless exists $args{squeeze};
 	$args{gap}     = 0 unless exists $args{gap};
+	$args{ignore}  = 0 unless exists $args{ignore};
 	$args{impfill} = ! exists $args{fill};
 	$args{expfill} = $args{fill};
+	$args{renumber} = 1 unless exists $args{renumber};
+	$args{autocentre} = 1 unless exists $args{autocentre};
 	$args{_centred} = 1 if $args{justify} =~ /cent(er(ed)?|red?)/;
 
+	# SPECIAL IGNORANCE...
+	my $ig_type = ref $args{ignore};
+	if ($ig_type eq 'Regexp') {
+		my $regex = $args{ignore};
+		$args{ignore} = sub { /$regex/ };
+	}
+	elsif ($args{ignore} =~ /^indent/i) {
+		$args{ignore} = sub { /\A[^\S\n].*(\n[^\S\n].*)*\Z/ }
+	}
+	croak "Expected suboutine reference as value for -ignore option"
+		if $args{ignore} && ref $args{ignore} ne 'CODE';
+	
 	# DETABIFY
 	my @rawlines = split /\n/, $text;
 	use Text::Tabs;
@@ -625,7 +111,7 @@ sub autoformat	# ($text, %args)
 			$lines[-1]{presig} .= $lines[-1]{quoter}     = defn $2;
 			$lines[-1]{presig} .= $lines[-1]{quotespace} = defn $3;
 
-			$lines[-1]{hang}       = defn Hang->new($_);
+			$lines[-1]{hang}       = Hang->new($_);
 
 			s/([ \t]*)(.*?)(\s*)$//
 				or die "Internal Error ($@) on '$_'";
@@ -660,7 +146,7 @@ sub autoformat	# ($text, %args)
 
 	CHUNK: foreach my $chunk ( @chunks )
 	{
-		next CHUNK if @$chunk < 2;
+		next CHUNK if !$args{autocentre} || @$chunk < 2;
 		my @length;
 		my $ave = 0;
 		foreach my $line (@$chunk)
@@ -717,18 +203,28 @@ sub autoformat	# ($text, %args)
 		}
 	}
 
-	# HANDLE FIRST PARA UNLESS $args{all}
+	# SELECT PARAS TO HANDLE
 
 	my $remainder = "";
-	unless ($args{all})
-	{
+	if ($args{all}) {
+		# NOTHING TO DO
+	}
+	elsif ($args{ignore}) {
+		for my $para (@paras) {
+			local $_ = $para->{raw};
+			$para->{ignore} = $args{ignore}->();
+		}
+	}
+	else { # JUST THE FIRST PARA
 		$remainder = join "\n", map { $_->{raw} } @paras[1..$#paras];
+	        $remainder .= "\n" unless $remainder =~ /\n\z/;
 		@paras = ( $paras[0] );
 	}
 
 	# RE-CASE TEXT
 	if ($args{case}) {
 		foreach my $para ( @paras ) {
+			next if $para->{ignore};
 			if ($args{case} =~ /upper/i) {
 				$para->{text} =~ tr/a-z/A-Z/;
 			}
@@ -748,6 +244,7 @@ sub autoformat	# ($text, %args)
 				ensentence();
 				$para->{text} =~ s/(\S+(\s+|$))/ensentence($1, $trailer)/ge;
 			}
+			$para->{text} =~ s/\b([A-Z])[.]/\U$1./gi; # ABBREVS
 		}
 	}
 
@@ -760,6 +257,7 @@ sub autoformat	# ($text, %args)
 	for my $i ( 0..$#paras )
 	{
 		my $para = $paras[$i];
+		next if $para->{ignore};
 
 	 if ($para->{quoter})
 		{
@@ -774,16 +272,15 @@ sub autoformat	# ($text, %args)
 
 # RENUMBER PARAGRAPHS
 
-	for my $para ( @paras )
-	{
+	for my $para ( @paras ) {
+		next if $para->{ignore};
 		my $sig = $para->{presig} . $para->{hang}->signature();
 		push @{$sigs{$sig}{hangref}}, $para;
 		$sigs{$sig}{hangfields} = $para->{hang}->fields()-1
 			unless defined $sigs{$sig}{hangfields};
 	}
 
-	while (my ($sig,$val) = each %sigs)
-	{
+	while (my ($sig,$val) = each %sigs) {
 		next unless $sig =~ /rom/;
 		field: for my $field ( 0..$val->{hangfields} )
 		{
@@ -813,13 +310,16 @@ sub autoformat	# ($text, %args)
 	}
 
 	my %prev;
-	for my $para ( @paras )
-	{
+
+	for my $para ( @paras ) {
+		next if $para->{ignore};
 		my $sig = $para->{presig} . $para->{hang}->signature();
-		unless ($para->{quoter}) {
-			$para->{hang}->incr($prev{""}, $prev{$sig});
-			$prev{""} = $prev{$sig} = $para->{hang}
-				unless $para->{hang}->empty;
+		if ($args{renumber}) {
+			unless ($para->{quoter}) {
+				$para->{hang}->incr($prev{""}, $prev{$sig});
+				$prev{""} = $prev{$sig} = $para->{hang}
+					unless $para->{hang}->empty;
+			}
 		}
 			
 		# COLLECT MAXIMAL HANG LENGTHS BY SIGNATURE
@@ -848,51 +348,58 @@ sub autoformat	# ($text, %args)
 	    if ($para->{empty}) {
 		$gap += 1 + ($para->{text} =~ tr/\n/\n/);
 	    }
-	    my $leftmargin = $args{left} ? " "x($args{left}-1)
+	    if ($para->{ignore}) {
+	        $text .= (!$para->{empty} ? "\n"x($args{gap}-$gap) : "") ;
+		$text .= $para->{raw};
+		$text .= "\n" unless $para->{raw} =~ /\n\z/;
+	    }
+	    else {
+	        my $leftmargin = $args{left} ? " "x($args{left}-1)
 					 : $para->{prespace};
-	    my $hlen = $para->{hanglen} || $para->{hang}->length;
-	    my $hfield = ($hlen==1 ? '~' : '>'x$hlen);
-	    my @hang;
-	    push @hang, $para->{hang}->stringify if $hlen;
-	    my $format = $leftmargin
+	        my $hlen = $para->{hanglen} || $para->{hang}->length;
+	        my $hfield = ($hlen==1 ? '~' : '>'x$hlen);
+	        my @hang;
+	        push @hang, $para->{hang}->stringify if $hlen;
+	        my $format = $leftmargin
 			   . quotemeta($para->{quoter})
 			   . $para->{quotespace}
 			   . $hfield
 			   . $para->{hangspace};
-	    my $rightslack = int (($args{right}-length $leftmargin)*$Text::Autoformat::widow_slack);
-	    my ($widow_okay, $rightindent, $firsttext, $newtext) = (0,0);
-	    do {
-	        my $tlen = $args{right}-$rightindent-length($leftmargin
-			 			. $para->{quoter}
-			 			. $para->{quotespace}
-			 			. $hfield
-			 			. $para->{hangspace});
-	        next if blockquote($text,$para, $format, $tlen, \@hang, \%args);
-	        my $tfield = ( $tlen==1                          ? '~'
-			     : $para->{centred}||$args{_centred} ? '|'x$tlen
-			     : $args{justify} eq 'right'         ? ']'x$tlen
-			     : $args{justify} eq 'full'          ? '['x($tlen-2) . ']]'
-			     : $para->{centred}||$args{_centred} ? '|'x$tlen
-			     :                                     '['x$tlen
-        		     );
-		my $tryformat = "$format$tfield";
-		$newtext = (!$para->{empty} ? "\n"x($args{gap}-$gap) : "") 
-		         . form( { squeeze=>$args{squeeze}, trim=>1,
-				   fill => !(!($args{expfill}
-					|| $args{impfill} &&
-					   !$para->{centred}))
-			       },
-				$tryformat, @hang,
-				$para->{text});
-		$firsttext ||= $newtext;
-		$newtext =~ /\s*([^\n]*)$/;
-		$widow_okay = $para->{empty} || length($1) >= $args{widow};
-		# print "[$rightindent <= $rightslack : $widow_okay : $1]\n";
-		# print $tryformat;
-		# print $newtext;
-	    } until $widow_okay || ++$rightindent > $rightslack;
-
-	    $text .= $widow_okay ? $newtext : $firsttext;
+	        my $rightslack = int (($args{right}-length $leftmargin)*$Text::Autoformat::widow_slack);
+	        my ($widow_okay, $rightindent, $firsttext, $newtext) = (0,0);
+	        do {
+	            my $tlen = $args{right}-$rightindent-length($leftmargin
+			 			    . $para->{quoter}
+			 			    . $para->{quotespace}
+			 			    . $hfield
+			 			    . $para->{hangspace});
+	            next if blockquote($text,$para, $format, $tlen, \@hang, \%args);
+	            my $tfield = ( $tlen==1                          ? '~'
+			         : $para->{centred}||$args{_centred} ? '|'x$tlen
+			         : $args{justify} eq 'right'         ? ']'x$tlen
+			         : $args{justify} eq 'full'          ? '['x($tlen-2) . ']]'
+			         : $para->{centred}||$args{_centred} ? '|'x$tlen
+			         :                                     '['x$tlen
+        		         );
+		    my $tryformat = "$format$tfield";
+		    $newtext = (!$para->{empty} ? "\n"x($args{gap}-$gap) : "") 
+		             . form( { squeeze=>$args{squeeze}, trim=>1,
+				       fill => !(!($args{expfill}
+					    || $args{impfill} &&
+					       !$para->{centred}))
+			           },
+				    $tryformat, @hang,
+				    $para->{text});
+		    $firsttext ||= $newtext;
+		    $newtext =~ /\s*([^\n]*)$/;
+		    $widow_okay = $para->{empty} || length($1) >= $args{widow};
+		    # print "[$rightindent <= $rightslack : $widow_okay : $1]\n";
+		    # print $tryformat;
+		    # print $newtext;
+	        } until $widow_okay || ++$rightindent > $rightslack;
+    
+	        $text .= $widow_okay ? $newtext : $firsttext;
+	    }
 	    $gap = 0 unless $para->{empty};
 	}
 
@@ -1217,12 +724,12 @@ __END__
 
 =head1 NAME
 
-Text::Autoformat - Automatic and manual text wrapping and reformating formatting
+Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.04 of Text::Autoformat,
-released December  5, 2000.
+This document describes version 1.07 of Text::Autoformat,
+released April  2, 2003.
 
 =head1 SYNOPSIS
 
@@ -1265,6 +772,10 @@ released December  5, 2000.
 	$formatted = autoformat $rawtext, { case => 'sentence' };
 	$formatted = autoformat $rawtext, { case => 'title' };
 	$formatted = autoformat $rawtext, { case => 'highlight' };
+
+ # Selective reformatting
+
+	$formatted = autoformat $rawtext, { ignore=>qr/^\t/ };
 
 
 =head1 BACKGROUND
@@ -1381,6 +892,25 @@ C<all> argument is used:
 
         $tidied_all = autoformat($messy, {left=>20, right=>60, all=>1});
 
+C<autoformat> can also be directed to selectively reformat paragraphs,
+using the C<ignore> argument:
+
+        $tidied_some = autoformat($messy, {ignore=>qr/^[ \t]/});
+
+The value for C<ignore> may be a C<qr>'d regex, a subroutine reference,
+or the special string C<'indented'>.
+
+If a regex is specified, any paragraph whose original text matches that
+regex will not be reformatted (i.e. it will be printed verbatim).
+
+If a subroutine is specified, that subroutine will be called once for
+each paragraph (with C<$_> set to the paragraph's text). The subroutine is
+expected to return a true or false value. If it returns true, the
+paragraph will not be reformatted.
+
+If the value of the C<ignore> option is the string C<'indented'>,
+C<autoformat> will ignore any paragraph in which I<every> line begins with a
+whitespace.
 
 =head2 Bulleting and (re-)numbering
 
@@ -1439,6 +969,10 @@ The C<autoformat> subroutine solves this problem by always interpreting
 alphabetic bullets as being letters, unless the full list consists
 only of valid Roman numerals, at least one of which is two or
 more characters long.
+
+If automatic renumbering isn't wanted, just specify the C<'renumber'>
+option with a false value.
+
 
 =head2 Quoting
 
@@ -1570,11 +1104,14 @@ on the line. That is, for a single line:
 By making the same estimate for every line, and then comparing the
 estimates, it is possible to deduce whether all the lines are centred
 with respect to the same axis of symmetry (with an allowance of
-E<plusminus>1 to cater for the inevitable rounding when the centre
+E<plusmn>1 to cater for the inevitable rounding when the centre
 positions of even-length rows were originally computed). If a common
 axis of symmetry is detected, C<autoformat> assumes that the lines are
 supposed to be centred, and switches to centre-justification mode for
 that paragraph.
+
+Note that this behaviour can to switched off entirely by setting the
+C<"autocentre"> argument false.
 
 =head2 Case transformations
 
@@ -1631,716 +1168,13 @@ capitalized:
 
 =back
 
-=head1 OTHER FEATURES
+=head2 Selective reformatting
 
-=head2 The C<form> sub
+You can select which paragraphs C<autoformat> actually reformats
 
-The C<form()> subroutine may be exported from the module.
-It takes a series of format (or "picture") strings followed by
-replacement values, interpolates those values into each picture string,
-and returns the result. The effect is similar to the inbuilt perl
-C<format> mechanism, although the field specification syntax is
-simpler and some of the formatting behaviour is more sophisticated.
+=head1 SEE ALSO
 
-A picture string consists of sequences of the following characters:
-
-=over 8
-
-=item <
-
-Left-justified field indicator.
-A series of sequential <'s specify
-a left-justified field to be filled by a subsequent value.
-
-=item >
-
-Right-justified field indicator.
-A series of sequential >'s specify
-a right-justified field to be filled by a subsequent value.
-
-=item ^
-
-Centre-justified field indicator.
-A series of sequential ^'s specify
-a centred field to be filled by a subsequent value.
-
-=item >>>.<<<<
-
-A numerically formatted field with the specified number of digits to
-either side of the decimal place. See L<Numerical formatting> below.
-
-
-=item [
-
-Left-justified block field indicator.
-Just like a < field, except it repeats as required on subsequent lines. See
-below.
-
-=item ]
-
-Right-justified block field indicator.
-Just like a > field, except it repeats as required on subsequent lines. See
-below.
-
-=item |
-
-Centre-justified block field indicator.
-Just like a ^ field, except it repeats as required on subsequent lines. See
-below.
-
-=item ]]].[[[[
-
-A numerically formatted block field with the specified number of digits to
-either side of the decimal place.
-Just like a >>>.<<<< field, except it repeats as required on
-subsequent lines. See below. 
-
-=item \
-
-Literal escape of next character (e.g. C<\|> is formatted as '|', not a one
-character wide centre-justified block field).
-
-=item Any other character
-
-That literal character.
-
-=back
-
-Any substitution value which is C<undef> (either explicitly so, or because it
-is missing) is replaced by an empty string.
-
-
-
-=head2 Controlling line filling.
-
-Note that, unlike the a perl C<format>, C<form> preserves whitespace
-(including newlines) unless called with certain options.
-
-The "squeeze" option (when specified with a true value) causes any sequence
-of spaces and/or tabs (but not newlines) in an interpolated string to be
-replaced with a single space.
-
-The "fill" option causes newlines to also be squeezed.
-
-Hence:
-
-	$frmt = "# [[[[[[[[[[[[[[[[[[[[[";
-	$data = "h  e\t \tl lo\nworld\t\t\t\t\t";
-
-	print form $frmt, $data;
-	# h  e            l lo
-	# world
-
-	print form {squeeze=>1}, $frmt, $data;
-	# h e l lo
-	# world
-
-	print form {fill=>1}, $frmt, $data;
-	# h  e            l lo world
-
-	print form {squeeze=>1, fill=>1}, $frmt, $data;
-	# h e l lo world
-
-
-Whether or not filling or squeezing is in effect, C<form> can also be
-directed to trim any extra whitespace from the end of each line it
-formats, using the "trim" option. If this option is specified with a
-true value, every line returned by C<form> will automatically have the
-substitution C<s/[ \t]+$//gm> applied to it.
-
-Hence:
-
-	print length form "[[[[[[[[[[", "short";
-	# 11
-
-	print length form {trim=>1}, "[[[[[[[[[[", "short";
-	# 6
-
-
-
-=head2 Temporary and permanent default options
-
-If C<form> is called with options, but no template string or data, it resets
-it's defaults to the options specified. If called in a void context:
-
-        form { squeeze => 1, trim => 1 };
-
-the options become permanent defaults.
-
-However, when called with only options in non-void context, C<form>
-resets its defaults to those options and returns an object. The reset
-default values persist only until that returned object is destroyed.
-Hence to temporarily reset C<form>'s defaults within a single subroutine:
-
-        sub single {
-                my $tmp = form { squeeze => 1, trim => 1 };
-
-                # do formatting with the obove defaults
-
-        } # form's defaults revert to previous values as $tmp object destroyed
-
-
-=head2 How C<form> hyphenates
-
-Any line with a block field repeats on subsequent lines until all block fields
-on that line have consumed all their data. Non-block fields on these lines are
-replaced by the appropriate number of spaces.
-
-Words are wrapped whole, unless they will not fit into the field at
-all, in which case they are broken and (by default) hyphenated. Simple
-hyphenation is used (i.e. break at the I<N-1>th character and insert a
-'-'), unless a suitable alternative subroutine is specified instead.
-
-Words will not be broken if the break would leave less than 2 characters on
-the current line. This minimum can be varied by setting the 'minbreak' option
-to a numeric value indicating the minumum total broken characters (including
-hyphens) required on the current line. Note that, for very narrow fields,
-words will still be broken (but I<unhyphenated>). For example:
-
-        print form '|', 'split';
-
-would print:
-
-        s
-        p
-        l
-        i
-        t
-
-whilst:
-
-        print form {minbreak=>1}, '|', 'split';
-
-would print:
-
-        s-
-        p-
-        l-
-        i-
-        t
-
-Alternative breaking subroutines can be specified using the "break" option in a
-configuration hash. For example:
-
-        form { break => \&my_line_breaker }
-             $format_str,
-             @data;
-
-C<form> expects any user-defined line-breaking subroutine to take three
-arguments (the string to be broken, the maximum permissible length of
-the initial section, and the total width of the field being filled).
-The C<hypenate> sub must return a list of two strings: the initial
-(broken) section of the word, and the remainder of the string
-respectively).
-
-For example:
-
-        sub tilde_break = sub($$$)
-        {
-                (substr($_[0],0,$_[1]-1).'~', substr($_[0],$_[1]-1));
-        }
-
-        form { break => \&tilde_break }
-             $format_str,
-             @data;
-
-
-makes '~' the hyphenation character, whilst:
-
-        sub wrap_and_slop = sub($$$)
-        {
-                my ($text, $reqlen, $fldlen) = @_;
-                if ($reqlen==$fldlen) { $text =~ m/\A(\s*\S*)(.*)/s }
-                else                  { ("", $text) }
-        }
-
-        form { break => \&wrap_and_slop }
-             $format_str,
-             @data;
-
-wraps excessively long words to the next line and "slops" them over
-the right margin if necessary.
-
-The Text::Autoformat package provides three functions to simplify the use
-of variant hyphenation schemes. The exportable subroutine
-C<Text::Autoformat::break_wrap> generates a reference to a subroutine
-implementing the "wrap-and-slop" algorithm shown in the last example,
-which could therefore be rewritten:
-
-        use Text::Autoformat qw( form break_wrap );
-
-        form { break => break_wrap }
-             $format_str,
-             @data;
-
-The subroutine C<Text::Autoformat::break_with> takes a single string
-argument and returns a reference to a sub which hyphenates with that
-string. Hence the first of the two examples could be rewritten:
-
-        use Text::Autoformat qw( form break_wrap );
-
-        form { break => break_with('~') }
-             $format_str,
-             @data;
-
-The subroutine C<Text::Autoformat::break_TeX> 
-returns a reference to a sub which hyphenates using 
-Jan Pazdziora's TeX::Hyphen module. For example:
-
-        use Text::Autoformat qw( form break_wrap );
-
-        form { break => break_TeX }
-             $format_str,
-             @data;
-
-Note that in the previous examples there is no leading '\&' before
-C<break_wrap>, C<break_with>, or C<break_TeX>, since each is being
-directly I<called> (and returns a reference to some other suitable
-subroutine);
-
-
-=head2 The C<form> formatting algorithm
-
-The algorithm C<form> uses is:
-
-        1. split the first string in the argument list
-           into individual format lines and add a terminating
-           newline (unless one is already present).
-
-        2. for each format line...
-
-                2.1. determine the number of fields and shift
-                     that many values off the argument list and
-                     into the filling list. If insufficient
-                     arguments are available, generate as many 
-                     empty strings as are required.
-
-                2.2. generate a text line by filling each field
-                     in the format line with the initial contents
-                     of the corresponding arg in the filling list
-                     (and remove those initial contents from the arg).
-
-                2.3. replace any <,>, or ^ fields by an equivalent
-                     number of spaces. Splice out the corresponding
-                     args from the filling list.
-
-                2.4. Repeat from step 2.2 until all args in the
-                     filling list are empty.
-
-        3. concatenate the text lines generated in step 2
-
-        4. repeat from step 1 until the argument list is empty
-
-
-=head2 C<form> examples
-
-As an example of the use of C<form>, the following:
-
-        $count = 1;
-        $text = "A big long piece of text to be formatted exquisitely";
-
-        print form q
-        {
-                ||||  <<<<<<<<<<
-                ----------------
-                ^^^^  ]]]]]]]]]]\|
-                                =
-                ]]].[[[
-                
-        }, $count, $text, $count+11, $text, "123 123.4\n123.456789";
-
-produces the following output:
-
-                 1    A big long
-                ----------------
-                 12     piece of|
-                      text to be|
-                       formatted|
-                      exquisite-|
-                              ly|
-                                =
-                123.0
-                123.4
-                123.456
-
-Picture strings and replacement values can be interleaved in the
-traditional C<format> format, but care is needed to ensure that the
-correct number of substitution values are provided. For example:
-
-        $report = form
-                'Name           Rank    Serial Number',
-                '====           ====    =============',
-                '<<<<<<<<<<<<<  ^^^^    <<<<<<<<<<<<<',
-                 $name,         $rank,  $serial_number,
-                ''
-                'Age    Sex     Description',
-                '===    ===     ===========',
-                '^^^    ^^^     [[[[[[[[[[[',
-                 $age,  $sex,   $description;
-
-
-=head2 How C<form> consumes strings
-
-Unlike C<format>, within C<form> non-block fields I<do> consume the text
-they format, so the following:
-
-        $text = "a line of text to be formatted over three lines";
-        print form "<<<<<<<<<<\n  <<<<<<<<\n    <<<<<<\n",
-                    $text,        $text,        $text;
-
-produces:
-
-        a line of
-          text to
-            be fo-
-
-not:
-
-        a line of
-          a line 
-            a line
-
-To achieve the latter effect, convert the variable arguments
-to independent literals (by double-quoted interpolation):
-
-        $text = "a line of text to be formatted over three lines";
-        print form "<<<<<<<<<<\n  <<<<<<<<\n    <<<<<<\n",
-                   "$text",      "$text",      "$text";
-
-Although values passed from variable arguments are progressively consumed
-I<within> C<form>, the values of the original variables passed to C<form>
-are I<not> altered.  Hence:
-
-        $text = "a line of text to be formatted over three lines";
-        print form "<<<<<<<<<<\n  <<<<<<<<\n    <<<<<<\n",
-                    $text,        $text,        $text;
-        print $text, "\n";
-
-will print:
-
-        a line of
-          text to
-            be fo-
-        a line of text to be formatted over three lines
-
-To cause C<form> to consume the values of the original variables passed to
-it, pass them as references. Thus:
-
-        $text = "a line of text to be formatted over three lines";
-        print form "<<<<<<<<<<\n  <<<<<<<<\n    <<<<<<\n",
-                    \$text,       \$text,       \$text;
-        print $text, "\n";
-
-will print:
-
-        a line of
-          text to
-            be fo-
-        rmatted over three lines
-
-Note that, for safety, the "non-consuming" behaviour takes precedence,
-so if a variable is passed to C<form> both by reference I<and> by value,
-its final value will be unchanged.
-
-=head2 Numerical formatting
-
-The ">>>.<<<" and "]]].[[[" field specifiers may be used to format
-numeric values about a fixed decimal place marker. For example:
-
-        print form '(]]]]].[[)', <<EONUMS;
-                   1
-                   1.0
-                   1.001
-                   1.009
-                   123.456
-                   1234567
-                   one two
-        EONUMS
-
-would print:
-                   
-        (    1.0 )
-        (    1.0 )
-        (    1.00)
-        (    1.01)
-        (  123.46)
-        (#####.##)
-        (?????.??)
-        (?????.??)
-
-Fractions are rounded to the specified number of places after the
-decimal, but only significant digits are shown. That's why, in the
-above example, 1 and 1.0 are formatted as "1.0", whilst 1.001 is
-formatted as "1.00".
-
-You can specify that the maximal number of decimal places always be used
-by giving the configuration option 'numeric' a value that matches
-/\bAllPlaces\b/i. For example:
-
-        print form { numeric => AllPlaces },
-                   '(]]]]].[[)', <<'EONUMS';
-                   1
-                   1.0
-        EONUMS
-
-would print:
-                   
-        (    1.00)
-        (    1.00)
-
-Note that although decimal digits are rounded to fit the specified width, the
-integral part of a number is never modified. If there are not enough places
-before the decimal place to represent the number, the entire number is 
-replaced with hashes.
-
-If a non-numeric sequence is passed as data for a numeric field, it is
-formatted as a series of question marks. This querulous behaviour can be
-changed by giving the configuration option 'numeric' a value that
-matches /\bSkipNaN\b/i in which case, any invalid numeric data is simply
-ignored. For example:
-
-
-        print form { numeric => 'SkipNaN' }
-                   '(]]]]].[[)',
-                   <<EONUMS;
-                   1
-                   two three
-                   4
-        EONUMS
-
-would print:
-                   
-        (    1.0 )
-        (    4.0 )
-
-
-=head2 Filling block fields with lists of values
-
-If an argument corresponding to a field is an array reference, then C<form>
-automatically joins the elements of the array into a single string, separating
-each element with a newline character. As a result, a call like this:
-
-        @values = qw( 1 10 100 1000 );
-        print form "(]]]].[[)", \@values;
-
-will print out
-
-         (   1.00)
-         (  10.00)
-         ( 100.00)
-         (1000.00)
-
-as might be expected.
-
-Note however that arrays must be passed by reference (so that C<form>
-knows that the entire array holds data for a single field). If the previous
-example had not passed @values by reference:
-
-        @values = qw( 1 10 100 1000 );
-        print form "(]]]].[[)", @values;
-
-the output would have been:
-
-         (   1.00)
-         10
-         100
-         1000
-
-This is because @values would have been interpolated into C<form>'s
-argument list, so only $value[0] would have been used as the data for
-the initial format string. The remaining elements of @value would have
-been treated as separate format strings, and printed out "verbatim".
-
-Note too that, because arrays must be passed using a reference, their
-original contents are consumed by C<form>, just like the contents of
-scalars passed by reference.
-
-To avoid having an array consumed by C<form>, pass it as an anonymous
-array:
-
-        print form "(]]]].[[)", [@values];
-
-
-=head2 Headers, footers, and pages
-
-The C<form> subroutine can also insert headers, footers, and page-feeds
-as it formats. These features are controlled by the "header", "footer",
-"pagefeed", "pagelen", and "pagenum" options.
-
-The "pagenum" option takes a scalar value or a reference to a scalar
-variable and starts page numbering at that value. If a reference to a
-scalar variable is specified, the value of that variable is updated as
-the formatting proceeds, so that the final page number is available in
-it after formatting. This can be useful for multi-part reports.
-
-The "pagelen" option specifies the total number of lines in a page (including
-headers, footers, and page-feeds).
-
-If the "header" option is specified with a string value, that string is
-used as the header of every page generated. If it is specified as a reference
-to a subroutine, that subroutine is called at the start of every page and
-its return value used as the header string. When called, the subroutine is
-passed the current page number.
-
-Likewise, if the "footer" option is specified with a string value, that
-string is used as the footer of every page generated. If it is specified
-as a reference to a subroutine, that subroutine is called at the I<start>
-of every page and its return value used as the footer string. When called,
-the footer subroutine is passed the current page number. If the option is
-specified as a hash, it acts as described above for the "header" option.
-
-Both the header and footer options can also be specified as hash references.
-In this case the hash entires for keys "left", "centre" (or "center"), and
-"right" specify what is to appear on the left, centre, and right of the
-header/footer. The entry for the key "width" specifies how wide the
-footer is to be. The  "left", "centre", and "right" values may be literal
-strings, or subroutines (just as a normal header/footer specification may
-be.) See the second example, below.
-
-The "pagefeed" option acts in exactly the same way, to produce a
-pagefeed which is appended after the footer. But note that the pagefeed
-is not counted as part of the page length.
-
-All three of these page components are recomputed at the start of each
-new page, before the page contents are formatted (recomputing the header
-and footer makes it possible to determine how many lines of data to
-format so as to adhere to the specified page length).
-
-When the call to C<form> is complete and the data has been fully formatted,
-the footer subroutine is called one last time, with an extra argument of 1.
-The string returned by this final call is used as the final footer.
-
-So for example, a 60-line per page report, starting at page 7,
-with appropriate headers and footers might be set up like so:
-
-        $page = 7;
-
-        form { header => sub { "Page $_[0]\n\n" },
-               footer => sub { return "" if $_[1];
-                               "-"x50 . "\n" . form ">"x50", "...".($_[0]+1);
-                             },
-               pagefeed => "\n\n",
-               pagelen  => 60
-               pagenum  => \$page,
-             },
-             $template,
-             @data;
-
-Note the recursive use of C<form> within the "footer" option.
-
-Alternatively, to set up headers and footers such that the running
-head is right justified in the header and the page number is centred
-in the footer:
-
-        form { header => { right => "Running head" },
-               footer => { centre => sub { "Page $_[0]" } },
-               pagelen  => 60
-             },
-             $template,
-             @data;
-
-
-
-=head2 The C<tag> sub
-
-The C<tag> subroutine may be exported from the module.
-It takes two arguments: a tag specifier and a text to be
-entagged. The tag specifier indicates the indenting of the tag, and of the
-text. The sub generates an end-tag (using the usual "/I<tag>" variant),
-unless an explicit end-tag is provided as the third argument.
-
-The tag specifier consists of the following components (in order):
-
-=over 4
-
-=item An optional vertical spacer (zero or more whitespace-separated newlines)
-
-One or more whitespace characters up to a final mandatory newline. This
-vertical space is inserted before the tag and after the end-tag
-
-=item An optional tag indent
-
-Zero or more whitespace characters. Both the tag and the end-tag are indented
-by this whitespace.
-
-=item An optional left (opening) tag delimiter
-
-Zero or more non-"word" characters (not alphanumeric or '_').
-If the opening delimiter is omitted, the character '<' is used.
-
-=item A tag
-
-One or more "word" characters (alphanumeric or '_').
-
-=item Optional tag arguments
-
-Any number of any characters
-
-=item An optional right (closing) tag delimiter
-
-Zero or more non-"word" characters which balance some sequential portion
-of the opening tag delimiter. For example, if the opening delimiter
-is "<-(" then any of the following are acceptible closing delimiters:
-")->", "->", or ">".
-If the closing delimiter is omitted, the "inverse" of the opening delimiter 
-is used (for example, ")->"),
-
-=item An optional vertical spacer (zero or more newlines)
-
-One or more whitespace characters up to a mandatory newline. This
-vertical space is inserted before and after the complete text.
-
-=item An optional text indent
-
-Zero or more space of tab characters. Each line of text is indented
-by this whitespace (in addition to the tag indent).
-
-
-=back
-
-For example:
-
-        $text = "three lines\nof tagged\ntext";
-
-        print tag "A HREF=#nextsection", $text;
-
-prints:
-
-        <A HREF=#nextsection>three lines
-        of tagged
-        text</A>
-
-whereas:
-
-        print tag "[-:GRIN>>>\n", $text;
-
-prints:
-
-        [-:GRIN>>>:-]
-        three lines
-        of tagged
-        text
-        [-:/GRIN>>>:-]
-
-and:
-
-        print tag "\n\n   <BOLD>\n\n   ", $text, "<END BOLD>";
-
-prints:
-
-S< >
-
-           <BOLD>
-
-              three lines
-              of tagged
-              text
-
-           <END BOLD>
-
-S< >
-
-(with the indicated spacing fore and aft).
+The Text::Reform module
 
 =head1 AUTHOR
 
