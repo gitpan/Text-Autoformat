@@ -3,3 +3,26 @@ Revision history for Perl extension Text::Autoformat.
 0.01  Mon Nov  3 14:05:02 1997
 	- original version; created by h2xs 1.18
 
+1.03	Thu Oct 26 10:14:20 2000
+
+	- Tweaked test.pl and POD
+
+	- required 5.005
+	  (module uses funky stuff that's broken in earlier perls - sorry Dave)
+
+	- added break_TeX subroutine to take advantage of TeX::Hyphen
+	  if it's installed.
+
+	- documented "sticky" config mode
+
+	- Changed semantics of footer generation slightly (see doc)
+
+	- fixed niggle in widow handling under full justification
+
+	- Added pagenum option to control page numbering
+
+	- Added three-part hash specification option for headers and footers
+	  (thanks Chaim)
+
+        - Added separator handling to autoformat -- also fixes
+          underlining of heading (thanks very much Simon)

@@ -1,5 +1,5 @@
 ==============================================================================
-                 Release of version 1.02 of Text::Autoformat
+                 Release of version 1.03 of Text::Autoformat
 ==============================================================================
 
 
@@ -32,9 +32,31 @@ COPYRIGHT
 
 ==============================================================================
 
-CHANGES IN VERSION 1.02
+CHANGES IN VERSION 1.03
 
-(No changes have been documented for this version)
+
+	- Tweaked test.pl and POD
+
+	- required 5.005
+	  (module uses funky stuff that's broken in earlier perls - sorry Dave)
+
+	- added break_TeX subroutine to take advantage of TeX::Hyphen
+	  if it's installed.
+
+	- documented "sticky" config mode
+
+	- Changed semantics of footer generation slightly (see doc)
+
+	- fixed niggle in widow handling under full justification
+
+	- Added pagenum option to control page numbering
+
+	- Added three-part hash specification option for headers and footers
+	  (thanks Chaim)
+
+        - Added separator handling to autoformat -- also fixes
+          underlining of heading (thanks very much Simon)
+
 
 ==============================================================================
 

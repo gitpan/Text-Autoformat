@@ -320,7 +320,7 @@ bb
 
 my $err = "";
 eval {form("<<<<<",{break=>break_with('-')},"abc") } or $err =  $@;
-$err =~ s/ at \S+ line \d+\s*//;
+$err =~ s/\s*\bat\b.*?\n.*//s;
 teststr { $err } "Configuration hash not allowed between format and data";
 
 $err = "";
