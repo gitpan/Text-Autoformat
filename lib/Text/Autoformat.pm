@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.08';
+$VERSION = '1.10';
 
 require Exporter;
 
@@ -728,8 +728,8 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.08 of Text::Autoformat,
-released April  2, 2003.
+This document describes version 1.10 of Text::Autoformat,
+released April  9, 2003.
 
 =head1 SYNOPSIS
 

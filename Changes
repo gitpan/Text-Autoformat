@@ -78,3 +78,8 @@ Revision history for Perl extension Text::Autoformat.
 1.08	Wed Apr  2 22:30:05 2003
 
 	- Simplified test.pl
+
+
+1.10	Wed Apr  9 08:49:51 2003
+
+	- Fixed test.pl again!!!

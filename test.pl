@@ -13,5 +13,3 @@ END {print "not ok 1\n" unless $loaded;}
 use Text::Autoformat;
 $loaded = 1;
 print "ok 1\n";
-
-######################### End of black magic.
