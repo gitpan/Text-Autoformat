@@ -1,5 +1,5 @@
 ==============================================================================
-                 Release of version 1.11 of Text::Autoformat
+                 Release of version 1.12 of Text::Autoformat
 ==============================================================================
 
 
@@ -32,12 +32,29 @@ COPYRIGHT
 
 ==============================================================================
 
-CHANGES IN VERSION 1.11
+CHANGES IN VERSION 1.12
 
 
-	- Enhanced "highlight" casing mode (thanks Tom)
+	- Now honours -- mail sig introducer
+	  (stops formatting that that point)
 
-	- Made hyphenation smarter (thanks Raj)
+	- Now ignores mail headers
+
+	- Added exportable &ignore_headers for 
+	  when using in user-defined "ignore" subs
+
+	- Now handles of embedded HTML entities 
+	  (thanks David)
+
+	- Added call to C<use utf8> for 5.6 compatibility
+	  (thanks Paolo)
+
+	- Restricted normal numbering to the range 0-999
+	  to prevent false numbering caused by a year (like
+	  1999) at the start of a line (like this)
+
+	- Fixed subtle bug with words starting with "ps-"
+	  being treated as post scripts (thanks Rashid!)
 
 
 ==============================================================================
