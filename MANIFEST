@@ -1,0 +1,6 @@
+lib/Text/Autoformat.pm
+Changes
+MANIFEST
+Makefile.PL
+test.pl
+demo.pl
