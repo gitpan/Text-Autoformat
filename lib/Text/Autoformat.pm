@@ -2,27 +2,30 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.10';
+$VERSION = '1.11';
 
 require Exporter;
 
-use Text::Reform qw( form tag break_with break_wrap break_TeX );
+use Text::Reform qw( form tag break_at break_with break_wrap break_TeX );
 
 @ISA = qw(Exporter);
 @EXPORT = qw( autoformat );
-@EXPORT_OK = qw( form tag break_with break_wrap break_TeX );
+@EXPORT_OK = qw( form tag break_at break_with break_wrap break_TeX );
 
 
-my $IGNORABLES = join "|", qw {
+my %ignore = map {$_=>1} qw {
 	a an at as and are
 	but by 
+	ere
 	for from
-	in is
-	of on or
-	the to that 
-	with while whilst with without
+	in into is
+	of on onto or over
+	per
+	the to that than
+	until unto upon
+	via
+	with while whilst within without
 };
-
 
 my $default_margin = 72;
 my $default_widow  = 10;
@@ -75,6 +78,7 @@ sub autoformat	# ($text, %args)
 	$args{squeeze} = 1 unless exists $args{squeeze};
 	$args{gap}     = 0 unless exists $args{gap};
 	$args{ignore}  = 0 unless exists $args{ignore};
+	$args{break}  = break_at('-') unless exists $args{break};
 	$args{impfill} = ! exists $args{fill};
 	$args{expfill} = $args{fill};
 	$args{renumber} = 1 unless exists $args{renumber};
@@ -232,11 +236,10 @@ sub autoformat	# ($text, %args)
 				$para->{text} =~ tr/A-Z/a-z/;
 			}
 			if ($args{case} =~ /title/i) {
-				$para->{text} =~ s/(\S+)/entitle($1)/ge;
+				entitle($para->{text});
 			}
 			if ($args{case} =~ /highlight/i) {
-				$para->{text} =~ s/(\S+)/entitle($1,1)/ge;
-				$para->{text} =~ s/([a-z])/\U$1/i;
+				entitle($para->{text},1);
 			}
 			if ($args{case} =~ /sentence(\s*)/i) {
 				my $trailer = $1;
@@ -384,6 +387,7 @@ sub autoformat	# ($text, %args)
 		    my $tryformat = "$format$tfield";
 		    $newtext = (!$para->{empty} ? "\n"x($args{gap}-$gap) : "") 
 		             . form( { squeeze=>$args{squeeze}, trim=>1,
+				       break=>$args{break},
 				       fill => !(!($args{expfill}
 					    || $args{impfill} &&
 					       !$para->{centred}))
@@ -410,13 +414,29 @@ sub autoformat	# ($text, %args)
 	return $text . $remainder;
 }
 
+my $alpha = qr/[^\W\d_]/;
+my $notalpha = qr/[\W\d_]/;
+my $word = qr/\pL(?:\pL'?)*/;
+my $upper = qr/[^\Wa-z\d_]/;
+my $lower = qr/[^\WA-Z\d_]/;
+my $mixed = qr/$alpha*?(?:$lower$upper|$upper$lower)$alpha*/;
+
 sub entitle {
-	my ($str,$ignore) = @_;
-	my $mixedcase = $str =~ /[a-z].*[A-Z]|[A-Z].*[a-z]/;
-	my $ignorable = $ignore && $str =~ /^[^a-z]*($IGNORABLES)[^a-z]*$/i;
-	$str = lc $str if $ignorable || ! $mixedcase ;
-	$str =~ s/([a-z])/\U$1/i unless $ignorable;
-	return $str;
+	my $ignore = pop;
+	local *_ = \shift;
+
+	# put into lowercase if on stop list, else titlecase
+	s/(\pL[\pL']*)/$ignore && $ignore{$1} ? $1 : ucfirst($1)/ge;
+
+	s/^(\pL[\pL']*) /\u\L$1/x;  # last  word guaranteed to cap
+	s/ (\pL[\pL']*)$/\u\L$1/x;  # first word guaranteed to cap
+
+	# treat parethesized portion as a complete title
+	s/\( (\pL[\pL']*) /(\u\L$1/x;
+	s/(\pL[\pL']*) \) /\u\L$1)/x;
+
+	# capitalize first word following colon or semi-colon
+	s/ ( [:;] \s+ ) (\pL[\pL']* ) /$1\u\L$2/x;
 }
 
 my $abbrev = join '|', qw{
@@ -728,8 +748,8 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.10 of Text::Autoformat,
-released April  9, 2003.
+This document describes version 1.11 of Text::Autoformat,
+released May  7, 2003.
 
 =head1 SYNOPSIS
 
@@ -872,6 +892,22 @@ These are placed after the text to be formatted, in a hash reference:
 
 By default, C<autoformat> uses a left margin of 1 (first column) and a
 right margin of 72.
+
+You can also control whether (and how) C<autoformat> breaks words at the
+end of a line, using the C<'break'> option:
+
+	# Turn off all hyphenation
+	use Text::Autoformat qw(autoformat break_wrap);
+        $tidied = autoformat($messy, {break=>break_wrap});
+
+	# Default hyphenation
+	use Text::Autoformat qw(autoformat break_at);
+        $tidied = autoformat($messy, {break=>break_at('-')});
+
+	# Use TeX::Hyphen module's hyphenation (module must be installed)
+	use Text::Autoformat qw(autoformat break_TeX);
+        $tidied = autoformat($messy, {break=>break_TeX});
+
 
 Normally, C<autoformat> only reformats the first paragraph it encounters,
 and leaves the remainder of the text unaltered. This behaviour is useful
@@ -1171,6 +1207,22 @@ capitalized:
 =head2 Selective reformatting
 
 You can select which paragraphs C<autoformat> actually reformats
+(or, rather, those it I<doesn't> reformat) using the C<"ignore"> flag.
+
+For example:
+
+	# Reformat all paras except those containing "verbatim"...
+	print autoformat { all => 1, ignore => qr/verbatim/i }, $text;
+	
+	# Reformat all paras except those less that 3 lines long...
+	print autoformat { all => 1, ignore => sub { tr/\n/\n/ < 3 } }, $text;
+
+	# Reformat all paras except those that are indented...
+	print autoformat { all => 1, ignore => qr/^\s/m }, $text;
+
+	# Reformat all paras except those that are indented (easier)...
+	print autoformat { all => 1, ignore => 'indented' }, $text;
+
 
 =head1 SEE ALSO
 
