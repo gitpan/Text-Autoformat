@@ -73,3 +73,8 @@ Revision history for Perl extension Text::Autoformat.
 
 	- Added "ignore" flag to control which paragraphs are reformatted
 	  (thanks Tony)
+
+
+1.08	Wed Apr  2 22:30:05 2003
+
+	- Simplified test.pl
