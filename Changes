@@ -114,3 +114,20 @@ Revision history for Perl extension Text::Autoformat.
 
 	- Fixed subtle bug with words starting with "ps-"
 	  being treated as post scripts (thanks Rashid!)
+
+
+1.13	Wed May  4 22:44:20 2005
+
+	- Added sample config files for emacs and vim
+
+	- Extended allows "Name>" quoters to "Name_1>" (thanks Simon)
+
+	- Fixed weird behaviour of "(e.g. at start of line" (thanks Tim)
+
+	- Fixed handling of mail headers by adding "mail" option
+	  (thanks Struan)
+
+	- Fixed bug in quoters (thanks Steve)
+
+    - Added a C<lists> option to turn off special treatment of apparent
+      lists (thanks Ingvar)

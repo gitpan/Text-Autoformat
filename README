@@ -1,5 +1,5 @@
 ==============================================================================
-                 Release of version 1.12 of Text::Autoformat
+                 Release of version 1.13 of Text::Autoformat
 ==============================================================================
 
 
@@ -32,29 +32,22 @@ COPYRIGHT
 
 ==============================================================================
 
-CHANGES IN VERSION 1.12
+CHANGES IN VERSION 1.13
 
 
-	- Now honours -- mail sig introducer
-	  (stops formatting that that point)
+	- Added sample config files for emacs and vim
 
-	- Now ignores mail headers
+	- Extended allows "Name>" quoters to "Name_1>" (thanks Simon)
 
-	- Added exportable &ignore_headers for 
-	  when using in user-defined "ignore" subs
+	- Fixed weird behaviour of "(e.g. at start of line" (thanks Tim)
 
-	- Now handles of embedded HTML entities 
-	  (thanks David)
+	- Fixed handling of mail headers by adding "mail" option
+	  (thanks Struan)
 
-	- Added call to C<use utf8> for 5.6 compatibility
-	  (thanks Paolo)
+	- Fixed bug in quoters (thanks Steve)
 
-	- Restricted normal numbering to the range 0-999
-	  to prevent false numbering caused by a year (like
-	  1999) at the start of a line (like this)
-
-	- Fixed subtle bug with words starting with "ps-"
-	  being treated as post scripts (thanks Rashid!)
+    - Added a C<lists> option to turn off special treatment of apparent
+      lists (thanks Ingvar)
 
 
 ==============================================================================

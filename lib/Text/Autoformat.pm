@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 require Exporter;
 
@@ -74,15 +74,23 @@ sub defn($)
 	return "";
 }
 
-my $ignore_headers = qr/\A(From\b.*$)?([^:]+:.*$([ \t].*$)*)+\s*\Z/m;
+my $ignore_headers = qr/
+	\A
+	(?: From \b .* $)?
+	(?: [^:\n]+ : .* \n
+		(?: [ \t] .* \n)*
+	)+
+	\s*
+	\Z
+	/mx;
 my $ignore_indent  = qr/^[^\S\n].*(\n[^\S\n].*)*$/;
 
-sub ignore_headers { $_[0]==1 && /$ignore_headers/ }
+sub ignore_headers { $_[0] && /$ignore_headers/ }
 
 # BITS OF A TEXT LINE
 
 my $quotechar = qq{[!#%=|:]};
-my $quotechunk = qq{(?:$quotechar(?![a-z])|[a-z]*>+)};
+my $quotechunk = qq{(?:$quotechar(?![a-z])|(?:[a-z]\\w*)?>+)};
 my $quoter = qq{(?:(?i)(?:$quotechunk(?:[ \\t]*$quotechunk)*))};
 
 my $separator = q/(?:[-_]{2,}|[=#*]{3,}|[+~]{4,})/;
@@ -115,14 +123,17 @@ sub autoformat	# ($text, %args)
 	$args{widow}   = 0 if $args{justify}||"" =~ /full/;
 	$args{widow}   = $default_widow unless exists $args{widow};
 	$args{case}    = '' unless exists $args{case};
+	$args{lists}   = 1 unless exists $args{lists};
 	$args{squeeze} = 1 unless exists $args{squeeze};
 	$args{gap}     = 0 unless exists $args{gap};
 	$args{break}  = break_at('-') unless exists $args{break};
 	$args{impfill} = ! exists $args{fill};
 	$args{expfill} = $args{fill};
+	$args{tabspace} = 8 unless exists $args{tabspace};
 	$args{renumber} = 1 unless exists $args{renumber};
 	$args{autocentre} = 1 unless exists $args{autocentre};
 	$args{_centred} = 1 if $args{justify} =~ /cent(er(ed)?|red?)/;
+	$args{all} ||= $args{mail};
 
 	# SPECIAL IGNORANCE...
 	if ($args{ignore}) {
@@ -138,13 +149,16 @@ sub autoformat	# ($text, %args)
 		croak "Expected suboutine reference as value for -ignore option"
 			if ref $args{ignore} ne 'CODE';
 	}
-	else {
+	elsif ($args{mail}) {
 		$args{ignore} = \&ignore_headers;
+	}
+	else {
+		$args{ignore} = sub{0};
 	}
 	
 	# DETABIFY
 	my @rawlines = split /\n/, $text;
-	use Text::Tabs;
+	use Text::Tabs; $tabstop = $args{tabspace};
 	@rawlines = expand(@rawlines);
 
 	# PARSE EACH LINE
@@ -160,7 +174,7 @@ sub autoformat	# ($text, %args)
 			$lines[-1]{presig} .= $lines[-1]{quoter}     = defn $2;
 			$lines[-1]{presig} .= $lines[-1]{quotespace} = defn $3;
 
-			$lines[-1]{hang}       = Hang->new($_);
+			$lines[-1]{hang} =  $args{lists} ? Hang->new($_) : NullHang->new();
 
 			s/([ \t]*)(.*?)(\s*)$//
 				or die "Internal Error ($@) on '$_'";
@@ -255,11 +269,13 @@ sub autoformat	# ($text, %args)
 	# SELECT PARAS TO HANDLE
 
 	my $remainder = "";
-	if ($args{all}) { # STOP AT MAIL TERMINATOR
+	if ($args{all}) { # STOP AT MAIL TERMINATOR IF $args{mail}
+		my $lastignored = 1;
 		for my $index (0..$#paras) {
-		    local $_ = $paras[$index]{raw};
-		    $paras[$index]{ignore} = $args{ignore}($index+1);
-		    next unless /^--$/;
+		    local $_ = $paras[$index]{raw} . "\n";
+		    $lastignored &&=
+				$paras[$index]{ignore} = $args{ignore}($lastignored);
+		    next unless $args{mail} && /^--$/;
 		    $remainder = join "\n", map { $_->{raw} } splice @paras, $index;
 	            $remainder .= "\n" unless $remainder =~ /\n\z/;
 		    last;
@@ -513,7 +529,9 @@ sub entitle {
 }
 
 my $abbrev = join '|', qw{
-	etc[.]	pp[.]	ph[.]?d[.]	U[.]S[.]
+	etc[.]	pp[.]	ph[.]?d[.]
+	(?:[A-Z][A-Za-z]+[.])+
+	(?:[A-Z][.])(?:[A-Z][.])+
 };
 
 my $gen_abbrev = join '|', $abbrev, qw{
@@ -604,6 +622,7 @@ sub blockquote {
 }
 
 package Hang;
+use strict;
 
 # ROMAN NUMERALS
 
@@ -657,6 +676,9 @@ sub new {
 	}
 	elsif ($_[1] =~ s#\A($hang)##) {
 		@vals = { type => 'bul', val => $1 }
+	}
+	elsif ($_[1] =~ m#\([^\s)]+\s#) {
+		@vals = ();
 	}
 	else {
 		local $^W;
@@ -801,6 +823,7 @@ sub length {
 sub empty { 0 }
 
 package NullHang;
+use strict;
 
 sub new       { bless {}, $_[0] }
 sub stringify { "" }
@@ -821,8 +844,8 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.12 of Text::Autoformat,
-released May 27, 2003.
+This document describes version 1.13 of Text::Autoformat,
+released May  4, 2005.
 
 =head1 SYNOPSIS
 
@@ -1021,6 +1044,14 @@ If the value of the C<ignore> option is the string C<'indented'>,
 C<autoformat> will ignore any paragraph in which I<every> line begins with a
 whitespace.
 
+One other special case of ignorance is ignoring mail headers and signature.
+This option is specified using the C<mail> argument:
+
+        $tidied_mesg = autoformat($messy_mesg, {mail=>1});
+
+Note that the C<mail> option automatically implies C<all>.
+
+
 =head2 Bulleting and (re-)numbering
 
 Often plaintext will include lists that are either:
@@ -1080,7 +1111,7 @@ only of valid Roman numerals, at least one of which is two or
 more characters long.
 
 If automatic renumbering isn't wanted, just specify the C<'renumber'>
-option with a false value.
+option with a false value. 
 
 Note that numbers above 1000 at the start of a line are no longer
 considered to be paragraph numbering. Numbered paragraphs running that
@@ -1112,6 +1143,11 @@ but which are now formatted:
         promised miracles of Future Life have failed to eventuate. This
         is a new phenomenon (it didn't happen in 1001) because the idea
         that the future might be different is a new phenomenon.
+
+If you want numbers less than 1000 (or other characters strings currently
+treated as bullets) to be ignored in this way, you can turn of list formatting
+entirely by setting the C<'lists'> option to a false value.
+
 
 =head2 Quoting
 
