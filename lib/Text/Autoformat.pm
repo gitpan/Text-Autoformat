@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-$VERSION = '1.13';
+use version; $VERSION = qv('1.14.0');
 
 require Exporter;
 
@@ -117,6 +117,7 @@ sub autoformat	# ($text, %args)
 	}
 
 	return unless length $text;
+	return $text unless $text =~ /\S/;
 
 	$args{right}   = $default_margin unless exists $args{right};
 	$args{justify} = "" unless exists $args{justify};
@@ -174,7 +175,7 @@ sub autoformat	# ($text, %args)
 			$lines[-1]{presig} .= $lines[-1]{quoter}     = defn $2;
 			$lines[-1]{presig} .= $lines[-1]{quotespace} = defn $3;
 
-			$lines[-1]{hang} =  $args{lists} ? Hang->new($_) : NullHang->new();
+			$lines[-1]{hang} = Hang->new($_, $args{lists});
 
 			s/([ \t]*)(.*?)(\s*)$//
 				or die "Internal Error ($@) on '$_'";
@@ -209,7 +210,8 @@ sub autoformat	# ($text, %args)
 
 	CHUNK: foreach my $chunk ( @chunks )
 	{
-		next CHUNK if !$args{autocentre} || @$chunk < 2;
+        $DB::single=1;
+		next CHUNK if !$args{autocentre} || @$chunk < 2 || $chunk->[0]{hang};
 		my @length;
 		my $ave = 0;
 		foreach my $line (@$chunk)
@@ -273,9 +275,9 @@ sub autoformat	# ($text, %args)
 		my $lastignored = 1;
 		for my $index (0..$#paras) {
 		    local $_ = $paras[$index]{raw} . "\n";
-		    $lastignored &&=
-				$paras[$index]{ignore} = $args{ignore}($lastignored);
-		    next unless $args{mail} && /^--$/;
+            $paras[$index]{ignore} = $args{ignore}($lastignored);
+		    $lastignored &&= $paras[$index]{ignore};
+		    next unless $args{mail} && /^--\s*$/;
 		    $remainder = join "\n", map { $_->{raw} } splice @paras, $index;
 	            $remainder .= "\n" unless $remainder =~ /\n\z/;
 		    last;
@@ -407,7 +409,7 @@ sub autoformat	# ($text, %args)
 	# BUILD FORMAT FOR EACH PARA THEN FILL IT 
 
 	$text = "";
-	my $gap = $paras[0]->{empty} ? 0 : $args{gap};
+	my $gap = @paras && $paras[0]->{empty} ? 0 : $args{gap};
 	for my $para ( @paras )
 	{
 	    if ($para->{empty}) {
@@ -528,15 +530,24 @@ sub entitle {
 	s/ ( [:;] \s+ ) ($alword) /$1 . recase($2,'title')/ex;
 }
 
-my $abbrev = join '|', qw{
-	etc[.]	pp[.]	ph[.]?d[.]
-	(?:[A-Z][A-Za-z]+[.])+
-	(?:[A-Z][.])(?:[A-Z][.])+
-};
+sub inv($@) { my ($k, %inv)=shift; for(0..$#_) {$inv{$_[$_]}=$_*$k} %inv } 
+my @unit= ( "" , qw ( I II III IV V VI VII VIII IX ));
+my @ten = ( "" , qw ( X XX XXX XL L LX LXX LXXX XC ));
+my @hund= ( "" , qw ( C CC CCC CD D DC DCC DCCC CM ));
+my @thou= ( "" , qw ( M MM MMM ));
+my %rval= (inv(1,@unit),inv(10,@ten),inv(100,@hund),inv(1000,@thou));
+my $rbpat= join ")(",join("|",reverse @thou), join("|",reverse @hund), join("|",reverse @ten), join("|",reverse @unit);
+my $rpat= join ")(?:",join("|",reverse @thou), join("|",reverse @hund), join("|",reverse @ten), join("|",reverse @unit);
+my $rom = qq/(?:(?=[MDCLXVI])(?:$rpat))/;
 
-my $gen_abbrev = join '|', $abbrev, qw{
- 	(^[^a-z]*([a-z][.])+)
-};
+my $abbrev = join '|', qw{ etc[.]	pp[.]	ph[.]?d[.] },
+	                   "(?!$rom)(?:[A-Z][A-Za-z]+[.])+",
+	                   '(?:[A-Z][.])(?:[A-Z][.])+';
+
+my $gen_abbrev = join '|',
+    qw{ etc[.]	pp[.]	ph[.]?d[.] },
+    '(?:[A-Z][.])(?:[A-Z][.])+',
+ 	'(^[^a-zA-Z]*([a-z][.])+)';
 
 my $term = q{(?:[.]|[!?]+)};
 
@@ -558,7 +569,7 @@ sub ensentence {
 		$str =~ s/([a-z])/uc $1/ie;
 		$brsent = $str =~ /^[[(]/;
 	}
-	$eos = $str !~ /($gen_abbrev)[^a-z]*\s/i
+	$eos = $str !~ /^($gen_abbrev)[^a-z]*\s/i
 	    && $str =~ /[a-z][^a-z]*$term([^a-z]*)\s/
 	    && !($1=~/[])]/ && !$brsent);
 	$str =~ s/\s+$/$trailer/ if $eos && $trailer;
@@ -626,14 +637,6 @@ use strict;
 
 # ROMAN NUMERALS
 
-sub inv($@) { my ($k, %inv)=shift; for(0..$#_) {$inv{$_[$_]}=$_*$k} %inv } 
-my @unit= ( "" , qw ( I II III IV V VI VII VIII IX ));
-my @ten = ( "" , qw ( X XX XXX XL L LX LXX LXXX XC ));
-my @hund= ( "" , qw ( C CC CCC CD D DC DCC DCCC CM ));
-my @thou= ( "" , qw ( M MM MMM ));
-my %rval= (inv(1,@unit),inv(10,@ten),inv(100,@hund),inv(1000,@thou));
-my $rbpat= join ")(",join("|",reverse @thou), join("|",reverse @hund), join("|",reverse @ten), join("|",reverse @unit);
-my $rpat= join ")(?:",join("|",reverse @thou), join("|",reverse @hund), join("|",reverse @ten), join("|",reverse @unit);
 
 sub fromRoman($)
 {
@@ -651,8 +654,7 @@ sub toRoman($$)
 
 # BITS OF A NUMERIC VALUE
 
-my $num = q/(?:\d{1,3}\b)/;
-my $rom = qq/(?:(?=[MDCLXVI])(?:$rpat))/;
+my $num = q/(?:\d{1,3}\b(?!:\d\d\b))/;     # Ignore 8:20 etc.
 my $let = q/[A-Za-z]/;
 my $pbr = q/[[(<]/;
 my $sbr = q/])>/;
@@ -668,16 +670,18 @@ my $hang        = qq{(?:(?i)(?:$hangNB|$hangword|$hangbullet)(?=[ \t]))};
 # IMPLEMENTATION
 
 sub new { 
-	my ($class, $orig) = @_;
+	my ($class, $orig, $lists_mode) = @_;
+    return NullHang->new() if !$lists_mode;
+
 	my $origlen = length $orig;
 	my @vals;
 	if ($_[1] =~ s#\A($hangPS)##) {
 		@vals = { type => 'ps', val => $1 }
 	}
-	elsif ($_[1] =~ s#\A($hang)##) {
+	elsif ($lists_mode =~ /1|bullet/i && $_[1] =~ s#\A($hang)##) {
 		@vals = { type => 'bul', val => $1 }
 	}
-	elsif ($_[1] =~ m#\([^\s)]+\s#) {
+	elsif ($_[1] =~ m#\A\([^\s)]+\s#) {
 		@vals = ();
 	}
 	else {
@@ -687,12 +691,18 @@ sub new {
 			last if $_[1] =~ m#\A($ows)($abbrev)#
 			     && (length $1 || !@vals);	# ws-separated or first
 
+            last if $_[1] =~ m{\A $ows $pbr [^$sbr \t]* \s}xms;
+
 			$cut = $origlen - length $_[1];
 			my $pre = $_[1] =~ s#\A($ows$pbr$ows)## ? $1 : "";
-			my $val =  $_[1] =~ s#\A($num)##  && { type=>'num', val=>$1 }
-			       || $_[1] =~ s#\A($rom)##i && { type=>'rom', val=>$1, nval=>fromRoman($1) }
-			       || $_[1] =~ s#\A($let(?!$let))##i && { type=>'let', val=>$1 }
-			       || { val => "", type => "" };
+			my $val
+                = ($lists_mode =~ /1|number/i && $_[1] =~ s#\A($num)##)
+                        ? { type=>'num', val=>$1 }
+			    : ($lists_mode =~ /1|roman/i && $_[1] =~ s#\A($rom)\b##i)
+                        ? { type=>'rom', val=>$1, nval=>fromRoman($1) }
+                : ($lists_mode =~ /1|alpha/i && $_[1] =~ s#\A($let(?!$let))##i)
+                        ? { type=>'let', val=>$1 }
+			    :         { val => "", type => "" };
 			$_[1] = $pre.$_[1] and last unless $val->{val};
 			$val->{post} = $pre && $_[1] =~ s#\A($ows()[.:/]?[$close{$pre}][.:/]?)## && $1
 		                     || $_[1] =~ s#\A($ows()[$sbr.:/])## && $1
@@ -705,13 +715,15 @@ sub new {
 			$_[1] = substr($orig,pop(@vals)->{cut});
 		}
 	}
-	# check for orphaned years...
-	if (@vals==1 && $vals[0]->{type} eq 'num'
-		     && $vals[0]->{val} >= 1000
-		     && $vals[0]->{post} eq '.')  {
-		$_[1] = substr($orig,pop(@vals)->{cut});
 
+	# check for orphaned years or unlikely Roman numerals...
+    if (@vals==1 && defined $vals[0]->{post} && $vals[0]->{post} =~ /[\.>)]/) {
+        my $v = $vals[0];
+        if ($v->{type} eq 'num' && $v->{val} >= 1000) {
+            $_[1] = substr($orig,pop(@vals)->{cut});
         }
+    }
+
 	return NullHang->new if !@vals;
 	bless \@vals, $class;
 } 
@@ -880,6 +892,10 @@ released May  4, 2005.
  # Squeezing whitespace (does so by default)...
 
 	$formatted = autoformat $rawtext, { squeeze=>0 };
+
+ # Select appropriate tabspacing (default is 8 spaces per tab):
+
+	$formatted = autoformat $rawtext, { tabspace=>4 };
 
  # Case conversions...
 
@@ -1073,7 +1089,7 @@ More importantly, if the points are numbered, the numbering is
 checked and reordered. For example, a list whose points have been
 rearranged:
 
-        2. Analyze problem
+        1. Analyze problem
         3. Design algorithm
         1. Code solution
         5. Test
@@ -1084,8 +1100,8 @@ would be renumbered automatically by C<autoformat>:
         1. Analyze problem
         2. Design algorithm
         3. Code solution
-        4. Ship
-        5. Test
+        4. Test
+        5. Ship
 
 The same reordering would be performed if the "numbering" was by letters
 (C<a.> C<b.> C<c.> etc.) or Roman numerals (C<i.> C<ii.> C<iii.)> or by
@@ -1093,13 +1109,13 @@ some combination of these (C<1a.> C<1b.> C<2a.> C<2b.> etc.) Handling
 disordered lists of letters and Roman numerals presents an interesting
 challenge. A list such as:
 
-        C. Put cat in box.
+        A. Put cat in box.
         D. Close lid.
         E. Activate Geiger counter.
 
 should be reordered as C<A.> C<B.> C<C.,> whereas:
 
-        C. Put cat in box.
+        I. Put cat in box.
         D. Close lid.
         XLI. Activate Geiger counter.
 
@@ -1110,13 +1126,17 @@ alphabetic bullets as being letters, unless the full list consists
 only of valid Roman numerals, at least one of which is two or
 more characters long.
 
+Note that renumbering starts at the first number actually given, rather than
+restarting at the first possible number. To renumber from 1 (or A.) you must
+change the first numbered bullet to that.
+
 If automatic renumbering isn't wanted, just specify the C<'renumber'>
 option with a false value. 
 
-Note that numbers above 1000 at the start of a line are no longer
+Note that normal numbers above 1000 at the start of a line are no longer
 considered to be paragraph numbering. Numbered paragraphs running that
 high are exceptionally rare, and much rarer than paragraphs that look
-like this:
+like these:
 
         Although it has long been popular (especially in the year
         2001) to point out that we now live in the Future, many
@@ -1148,6 +1168,21 @@ If you want numbers less than 1000 (or other characters strings currently
 treated as bullets) to be ignored in this way, you can turn of list formatting
 entirely by setting the C<'lists'> option to a false value.
 
+You can also select which kinds of lists are recognized, by using a string as
+the value of lists:
+
+    # Don't recognize Roman numerals or alphabetics as list markers...
+    autoformat { lists => 'number, bullet' }, $text;
+
+    # Don't recognize bullets or numbers as list markers...
+    autoformat { lists => 'roman, alpha' }, $text;
+
+    # Recognize everything except Roman numerals as list markers...
+    autoformat { lists => 'number, bullet, alpha' }, $text;
+
+The string should contain one or more of the following words: C<number>,
+C<bullet>, C<alpha>, C<roman>. C<autoformat()> will ignore any list type that
+doesn't appear in the C<'lists'> string.
 
 =head2 Quoting
 
@@ -1196,8 +1231,8 @@ paragraph:
 When reformatted (see below), the indentation and the attribution
 structure will be preserved:
 
-        "We are all of us in the gutter, but some of us are looking at
-         the stars"
+        "We are all of us in the gutter, but some of us are looking
+         at the stars"
                                 -- Oscar Wilde
 
 =head2 Widow control
@@ -1234,28 +1269,28 @@ C<'center'>), and C<'full'>. These act on the complete paragraph text
 (but I<not> on any quoters before that text). For example, with
 C<'right'> justification:
 
-         R3>     Now is the Winter of our discontent made
-         R4> glorious Summer by this son of York. And all
-         R5> the clouds that lour'd upon our house In the
-         R6>              deep bosom of the ocean buried.
+        R3>     Now is the Winter of our discontent made
+        R3> glorious Summer by this son of York. And all
+        R3> the clouds that lour'd upon our house In the
+        R3>              deep bosom of the ocean buried.
 
 Full justification is interesting in a fixed-width medium like plaintext
 because it usually results in uneven spacing between words. Typically,
 formatters provide this by distributing the extra spaces into the first
 available gaps of each line:
 
-         R7> Now is the Winter of our discontent made
-         R8> glorious Summer by this son of York. And all
-         R9> the clouds that lour'd upon our house In
-        R10> the deep bosom of the ocean buried.
+        R3> Now  is  the  Winter  of our discontent made
+        R3> glorious Summer by this son of York. And all
+        R3> the  clouds  that  lour'd  upon our house In
+        R3> the deep bosom of the ocean buried.
 
 This produces a rather jarring visual effect, so C<autoformat> reverses
 the strategy and inserts extra spaces at the end of lines:
 
-        R11> Now is the Winter of our discontent made
-        R12> glorious Summer by this son of York. And all
-        R13> the clouds that lour'd upon our house In
-        R14> the deep bosom of the ocean buried.
+        R3> Now is the  Winter of  our  discontent  made
+        R3> glorious Summer by this son of York. And all
+        R3> the clouds that lour'd  upon  our  house  In
+        R3> the deep bosom of the ocean buried.
 
 Most readers find this less disconcerting.
 
@@ -1365,6 +1400,16 @@ For example:
         print autoformat { all => 1, ignore => 'indented' }, $text;
 
 
+=head2 Handling tabs
+
+Text::Autoformat replaces any tabs in the text it's formatting with the
+appropriate number of spaces (using Text::Tabs to do its dirty work). It
+normally assumes that each tab is equivalent to 8 space characters, but you
+can change that default using the 'tabspace' option:
+
+        print autoformat { tabspace => 4 }, $text;
+
+
 =head1 SEE ALSO
 
 The Text::Reform module
@@ -1378,9 +1423,33 @@ Damian Conway (damian@conway.org)
 There are undoubtedly serious bugs lurking somewhere in code this funky
 :-) Bug reports and other feedback are most welcome.
 
-=head1 COPYRIGHT
+=head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 1997-2000, Damian Conway. All Rights Reserved. This module
-is free software. It may be used, redistributed and/or modified under
-the terms of the Perl Artistic License (see
-http://www.perl.com/perl/misc/Artistic.html)
+Copyright (c) 1997-2007, Damian Conway C<< <DCONWAY@CPAN.org> >>. All rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself. See L<perlartistic>.
+
+
+=head1 DISCLAIMER OF WARRANTY
+
+BECAUSE THIS SOFTWARE IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
+FOR THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN
+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES
+PROVIDE THE SOFTWARE "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER
+EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE
+ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH
+YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL
+NECESSARY SERVICING, REPAIR, OR CORRECTION.
+
+IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
+REDISTRIBUTE THE SOFTWARE AS PERMITTED BY THE ABOVE LICENCE, BE
+LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL,
+OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE
+THE SOFTWARE (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.

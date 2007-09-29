@@ -1,4 +1,4 @@
-Revision history for Perl extension Text::Autoformat.
+Revision history for Text-Autoformat
 
 0.01  Mon Nov  3 14:05:02 1997
 	- original version; created by h2xs 1.18
@@ -131,3 +131,58 @@ Revision history for Perl extension Text::Autoformat.
 
     - Added a C<lists> option to turn off special treatment of apparent
       lists (thanks Ingvar)
+
+
+
+1.14.0  Sun Sep 30 04:29:29 2007
+
+    - Fixed bug in handling empty mail messages
+
+    - Fixed bug in handling sig delimiters
+
+    - Fixed bug in paragraph ignoring code (thanks Rob)
+
+    - Fixed bug in handling whitespace-only input (thanks Ed)
+
+    - Fixed bug in Roman numerals (thanks Suresh)
+
+    - Fixed overeager autocentering (thanks Suresh)
+
+    - Enhanced 'lists' option to allow only specific types of lists
+      to be recognized (thanks Rob)
+
+    - Fixed bug in numbered hangs (thanks Rob)
+
+    - Fixed bug in Roman numeraled hangs (thanks Rob)
+
+    - Fixed misidentification of 8:20-style times as leading numbers (thanks
+      Rob)
+
+    - Fixed sentence mode (thanks Eric)
+
+    - Changed licence to "same terms as Perl itself" to improve Fedora
+      compatibility
+
+
+1.14.1  Sun Sep 30 04:31:32 2007
+        No changes logged
+
+
+2.0.0  Sun Sep 30 04:32:47 2007
+       No changes logged
+
+
+3.0.0  Sun Sep 30 04:33:10 2007
+       No changes logged
+
+
+1.14.0  Sun Sep 30 04:37:40 2007
+        No changes logged
+
+
+1.14.0  Sun Sep 30 04:39:35 2007
+        No changes logged
+
+
+1.14.0  Sun Sep 30 04:42:29 2007
+        No changes logged
