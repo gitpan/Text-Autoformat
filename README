@@ -1,4 +1,4 @@
-Text::Autoformat version 1.666.0
+Text::Autoformat version 1.668001
 
 NAME
     Text::Autoformat - Automatic and manual text wrapping and reformating
@@ -46,7 +46,7 @@ Requires the Text::Reform module
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 1997-2007, Damian Conway
+Copyright (C) 1997-2009, Damian Conway
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

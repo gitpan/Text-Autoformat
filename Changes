@@ -167,3 +167,8 @@ Revision history for Text-Autoformat
 
 1.666.0  Fri Apr 17 08:00:36 2009
          No changes logged
+
+
+1.668001  Sat Apr  3 15:38:55 2010
+
+    - Removed spurious debugging statement in bad Pod. (Thanks Chris)

@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-use version; $VERSION = qv('1.666.0');
+our $VERSION = '1.668001';
 
 require Exporter;
 
@@ -121,7 +121,7 @@ sub autoformat  # ($text, %args)
 
     $args{right}   = $default_margin unless exists $args{right};
     $args{justify} = "" unless exists $args{justify};
-    $args{widow}   = 0 if $args{justify}||"" =~ /full/;
+    $args{widow}   = 0 if ($args{justify}||"") =~ /full/;
     $args{widow}   = $default_widow unless exists $args{widow};
     $args{case}    = '' unless exists $args{case};
     $args{lists}   = 1 unless exists $args{lists};
@@ -579,21 +579,7 @@ sub ensentence {
 # blockquote($text,$para, $format, $tlen, \@hang, \%args);
 sub blockquote {
     my ($dummy, $para, $format, $tlen, $hang, $args) = @_;
-=begin other
-    print STDERR "[", join("|", $para->{raw} =~
-/ \A(\s*)       # $1 - leading whitespace (quotation)
-       (["']|``)        # $2 - opening quotemark
-       (.*)         # $3 - quotation
-       (''|\2)      # $4 closing quotemark
-       \s*?\n       # trailing whitespace
-       (\1[ ]+)     # $5 - leading whitespace (attribution)
-       (--|-)       # $6 - attribution introducer
-       ([^\n]*?$)       # $7 - attribution line 1
-       ((\5[^\n]*?$)*)      # $8 - attributions lines 2-N
-       \s*\Z
-     /xsm
-), "]\n";
-=cut
+
     $para->{text} =~
         / \A(\s*)       # $1 - leading whitespace (quotation)
        (["']|``)        # $2 - opening quotemark
@@ -856,8 +842,8 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.13 of Text::Autoformat,
-released May  4, 2005.
+This document describes version 1.668001 of Text::Autoformat
+released Apr 16, 2009.
 
 =head1 SYNOPSIS
 

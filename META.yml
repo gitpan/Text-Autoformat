@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Text-Autoformat
-version:             1.666.0
+version:             1.668001
 abstract:            Automatic text wrapping and reformatting
 license:             ~
 author:              
