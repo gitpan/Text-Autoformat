@@ -8,3 +8,4 @@ lib/Text/Autoformat.pm
 t/00.load.t
 config.emacs
 config.vim
+t/01.ignore.t

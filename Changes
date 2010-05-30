@@ -172,3 +172,8 @@ Revision history for Text-Autoformat
 1.668001  Sat Apr  3 15:38:55 2010
 
     - Removed spurious debugging statement in bad Pod. (Thanks Chris)
+
+
+1.669001  Fri May 28 07:38:36 2010
+
+    - Added major improvements to the 'ignore' option (thanks Dan!)

@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.668001';
+our $VERSION = '1.669001';
 
 require Exporter;
 
@@ -139,22 +139,15 @@ sub autoformat  # ($text, %args)
     # SPECIAL IGNORANCE...
     if ($args{ignore}) {
         $args{all} = 1;
-        my $ig_type = ref $args{ignore};
-        if ($ig_type eq 'Regexp') {
-            my $regex = $args{ignore};
-            $args{ignore} = sub { /$regex/ };
-        }
-        elsif ($args{ignore} =~ /^indent/i) {
-            $args{ignore} = sub { ignore_headers(@_) || /$ignore_indent/ };
-        }
-        croak "Expected suboutine reference as value for -ignore option"
-            if ref $args{ignore} ne 'CODE';
-    }
-    elsif ($args{mail}) {
-        $args{ignore} = \&ignore_headers;
+        $args{ignore} = _build_ignore( $args{ignore} );
     }
     else {
         $args{ignore} = sub{0};
+    }
+
+    if ( $args{mail} ) {
+        my $ignore = $args{ignore};
+        $args{ignore} = sub { $ignore->(@_) || ignore_headers(@_) };
     }
     
     # DETABIFY
@@ -473,6 +466,28 @@ sub autoformat  # ($text, %args)
 
     if ($toSTDOUT) { print STDOUT $text . $remainder; return }
     return $text . $remainder;
+}
+
+sub _build_ignore {
+    my $ignore_arg = shift;
+    my $ig_type = ref $ignore_arg;
+    my $ignore;
+    if ($ig_type eq 'Regexp') {
+        my $regex = $ignore_arg;
+        $ignore = sub { /$regex/ };
+    } elsif ($ig_type eq 'ARRAY') {
+        my @elements = map { _build_ignore($_) } @$ignore_arg;
+        $ignore = sub {
+            for my $sub (@elements) { return 1 if $sub->(@_) }
+            return 0;
+        };
+    }
+    elsif ($ignore_arg =~ /^indent/i) {
+        $ignore = sub { ignore_headers(@_) || /$ignore_indent/ };
+    }
+    croak "Expected suboutine reference as value for -ignore option"
+        if ref $ignore ne 'CODE';
+    return $ignore;
 }
 
 use utf8;
@@ -842,7 +857,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.668001 of Text::Autoformat
+This document describes version 1.669001 of Text::Autoformat
 released Apr 16, 2009.
 
 =head1 SYNOPSIS
@@ -1046,12 +1061,17 @@ If the value of the C<ignore> option is the string C<'indented'>,
 C<autoformat> will ignore any paragraph in which I<every> line begins with a
 whitespace.
 
+You may also specify multiple C<ignore> options by including them in 
+an array-ref:
+
+        $tidied_mesg = autoformat($messy, {ignore=>[qr/1/,'indented']});
+
 One other special case of ignorance is ignoring mail headers and signature.
 This option is specified using the C<mail> argument:
 
         $tidied_mesg = autoformat($messy_mesg, {mail=>1});
 
-Note that the C<mail> option automatically implies C<all>.
+Note that the C<ignore> or C<mail> options automatically imply C<all>.
 
 
 =head2 Bulleting and (re-)numbering
