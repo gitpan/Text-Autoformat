@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.669001';
+our $VERSION = '1.669002';
 
 require Exporter;
 
@@ -485,6 +485,9 @@ sub _build_ignore {
     elsif ($ignore_arg =~ /^indent/i) {
         $ignore = sub { ignore_headers(@_) || /$ignore_indent/ };
     }
+    else {
+        $ignore = $ignore_arg;
+    }
     croak "Expected suboutine reference as value for -ignore option"
         if ref $ignore ne 'CODE';
     return $ignore;
@@ -857,8 +860,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.669001 of Text::Autoformat
-released Apr 16, 2009.
+This document describes version 1.669002 of Text::Autoformat
 
 =head1 SYNOPSIS
 

@@ -6,6 +6,6 @@ Makefile.PL
 README
 lib/Text/Autoformat.pm
 t/00.load.t
+t/01.ignore.t
 config.emacs
 config.vim
-t/01.ignore.t

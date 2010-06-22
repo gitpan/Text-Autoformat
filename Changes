@@ -1,133 +1,133 @@
 Revision history for Text-Autoformat
 
 0.01  Mon Nov  3 14:05:02 1997
-	- original version; created by h2xs 1.18
+    - original version; created by h2xs 1.18
 
-1.03	Thu Oct 26 10:14:20 2000
+1.03    Thu Oct 26 10:14:20 2000
 
-	- Tweaked test.pl and POD
+    - Tweaked test.pl and POD
 
-	- required 5.005
-	  (module uses funky stuff that's broken in earlier perls - sorry Dave)
+    - required 5.005
+      (module uses funky stuff that's broken in earlier perls - sorry Dave)
 
-	- added break_TeX subroutine to take advantage of TeX::Hyphen
-	  if it's installed.
+    - added break_TeX subroutine to take advantage of TeX::Hyphen
+      if it's installed.
 
-	- documented "sticky" config mode
+    - documented "sticky" config mode
 
-	- Changed semantics of footer generation slightly (see doc)
+    - Changed semantics of footer generation slightly (see doc)
 
-	- fixed niggle in widow handling under full justification
+    - fixed niggle in widow handling under full justification
 
-	- Added pagenum option to control page numbering
+    - Added pagenum option to control page numbering
 
-	- Added three-part hash specification option for headers and footers
-	  (thanks Chaim)
+    - Added three-part hash specification option for headers and footers
+      (thanks Chaim)
 
         - Added separator handling to autoformat -- also fixes
           underlining of heading (thanks very much Simon)
 
 
-1.04	Tue Dec  5 10:31:22 2000
+1.04    Tue Dec  5 10:31:22 2000
 
-	- Limited numerical bullets to 3 digits.
-	  This stops autoformat from misclassifying orphaned years such as
-	  2001.
+    - Limited numerical bullets to 3 digits.
+      This stops autoformat from misclassifying orphaned years such as
+      2001.
 
-	- Added new abbreviations
+    - Added new abbreviations
 
-	- Doc patch on numerical formatting (thanks Andy)
+    - Doc patch on numerical formatting (thanks Andy)
 
-	- Major bug fixes to renumbering mechanism
+    - Major bug fixes to renumbering mechanism
 
-	- Turned off renumbering in quoted text.
+    - Turned off renumbering in quoted text.
 
-	- Added correct autostringification of autostringifying objects
-	  passed to &form. (Thanks Leon)
+    - Added correct autostringification of autostringifying objects
+      passed to &form. (Thanks Leon)
 
-	- Cleaned up "evil" exporting code left over from testing
-	  (Thanks Rick)
-
-
-1.07	Wed Apr  2 04:45:05 2003
-
-	- Tweaked pod to remove invalid markup
-
-	- Fixed left justification of last line of fully justified text
-	  (thanks Elias)
-
-	- Devolved &from and &tag to Text::Reform
-
-	- Fixed incorrect handling of stringifiable objects (thanks dLux)
-
-	- Fixed bugs on null input (now short-circuits)
-
-	- Fixed unwarranted trimming of trailing newlines (thanks Mark)
-
-	- Added C<renumber> option to control renumbering
-
-	- Preserved capitalization of abbreviations under case changes
-	  (thanks Alex)
-
-	- Added "autocentre" flag to switch off auto-centring of paras
-
-	- Added "ignore" flag to control which paragraphs are reformatted
-	  (thanks Tony)
+    - Cleaned up "evil" exporting code left over from testing
+      (Thanks Rick)
 
 
-1.08	Wed Apr  2 22:30:05 2003
+1.07    Wed Apr  2 04:45:05 2003
 
-	- Simplified test.pl
+    - Tweaked pod to remove invalid markup
 
+    - Fixed left justification of last line of fully justified text
+      (thanks Elias)
 
-1.10	Wed Apr  9 08:49:51 2003
+    - Devolved &from and &tag to Text::Reform
 
-	- Fixed test.pl again!!!
+    - Fixed incorrect handling of stringifiable objects (thanks dLux)
 
+    - Fixed bugs on null input (now short-circuits)
 
-1.11	Wed May  7 09:44:26 2003
+    - Fixed unwarranted trimming of trailing newlines (thanks Mark)
 
-	- Enhanced "highlight" casing mode (thanks Tom)
+    - Added C<renumber> option to control renumbering
 
-	- Made hyphenation smarter (thanks Raj)
+    - Preserved capitalization of abbreviations under case changes
+      (thanks Alex)
 
+    - Added "autocentre" flag to switch off auto-centring of paras
 
-1.12	Tue May 27 23:34:33 2003
-
-	- Now honours -- mail sig introducer
-	  (stops formatting that that point)
-
-	- Now ignores mail headers
-
-	- Added exportable &ignore_headers for 
-	  when using in user-defined "ignore" subs
-
-	- Now handles of embedded HTML entities 
-	  (thanks David)
-
-	- Added call to C<use utf8> for 5.6 compatibility
-	  (thanks Paolo)
-
-	- Restricted normal numbering to the range 0-999
-	  to prevent false numbering caused by a year (like
-	  1999) at the start of a line (like this)
-
-	- Fixed subtle bug with words starting with "ps-"
-	  being treated as post scripts (thanks Rashid!)
+    - Added "ignore" flag to control which paragraphs are reformatted
+      (thanks Tony)
 
 
-1.13	Wed May  4 22:44:20 2005
+1.08    Wed Apr  2 22:30:05 2003
 
-	- Added sample config files for emacs and vim
+    - Simplified test.pl
 
-	- Extended allows "Name>" quoters to "Name_1>" (thanks Simon)
 
-	- Fixed weird behaviour of "(e.g. at start of line" (thanks Tim)
+1.10    Wed Apr  9 08:49:51 2003
 
-	- Fixed handling of mail headers by adding "mail" option
-	  (thanks Struan)
+    - Fixed test.pl again!!!
 
-	- Fixed bug in quoters (thanks Steve)
+
+1.11    Wed May  7 09:44:26 2003
+
+    - Enhanced "highlight" casing mode (thanks Tom)
+
+    - Made hyphenation smarter (thanks Raj)
+
+
+1.12    Tue May 27 23:34:33 2003
+
+    - Now honours -- mail sig introducer
+      (stops formatting that that point)
+
+    - Now ignores mail headers
+
+    - Added exportable &ignore_headers for 
+      when using in user-defined "ignore" subs
+
+    - Now handles of embedded HTML entities 
+      (thanks David)
+
+    - Added call to C<use utf8> for 5.6 compatibility
+      (thanks Paolo)
+
+    - Restricted normal numbering to the range 0-999
+      to prevent false numbering caused by a year (like
+      1999) at the start of a line (like this)
+
+    - Fixed subtle bug with words starting with "ps-"
+      being treated as post scripts (thanks Rashid!)
+
+
+1.13    Wed May  4 22:44:20 2005
+
+    - Added sample config files for emacs and vim
+
+    - Extended allows "Name>" quoters to "Name_1>" (thanks Simon)
+
+    - Fixed weird behaviour of "(e.g. at start of line" (thanks Tim)
+
+    - Fixed handling of mail headers by adding "mail" option
+      (thanks Struan)
+
+    - Fixed bug in quoters (thanks Steve)
 
     - Added a C<lists> option to turn off special treatment of apparent
       lists (thanks Ingvar)
@@ -177,3 +177,8 @@ Revision history for Text-Autoformat
 1.669001  Fri May 28 07:38:36 2010
 
     - Added major improvements to the 'ignore' option (thanks Dan!)
+
+
+1.669002  Tue Jun 22 15:39:35 2010
+
+    - Patched missing case in 'ignore' option handling (thanks Alan)
