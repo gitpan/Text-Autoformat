@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.669002';
+our $VERSION = '1.669003';
 
 require Exporter;
 
@@ -14,7 +14,7 @@ use Text::Reform qw( form tag break_at break_with break_wrap break_TeX );
     qw( form tag break_at break_with break_wrap break_TeX ignore_headers );
 
 
-my %ignore = map {$_=>1} qw {
+my %std_highlight_ignore = map {$_=>1} qw {
     a an at as and are
     but by 
     ere
@@ -26,6 +26,11 @@ my %ignore = map {$_=>1} qw {
     until unto upon
     via
     with while whilst within without
+};
+
+my $STD_HIGHLIGHT_IGNORES = sub {
+    my ($word) = @_;
+    return $std_highlight_ignore{lc $word} ? recase($word,'lower') : recase($word,'title');
 };
 
 my @entities = qw {
@@ -286,19 +291,22 @@ sub autoformat  # ($text, %args)
     if ($args{case}) {
         foreach my $para ( @paras ) {
             next if $para->{ignore};
-            if ($args{case} =~ /upper/i) {
+            if (ref $args{case} eq 'CODE') {
+                $para->{text} = entitle($para->{text}, $args{case});
+            }
+            elsif ($args{case} =~ /upper/i) {
                 $para->{text} = recase($para->{text}, 'upper');
             }
-            if ($args{case} =~ /lower/i) {
+            elsif ($args{case} =~ /lower/i) {
                 $para->{text} = recase($para->{text}, 'lower');
             }
-            if ($args{case} =~ /title/i) {
-                entitle($para->{text},0);
+            elsif ($args{case} =~ /title/i) {
+                $para->{text} = entitle($para->{text}, 0);
             }
-            if ($args{case} =~ /highlight/i) {
-                entitle($para->{text},1);
+            elsif ($args{case} =~ /highlight/i) {
+                $para->{text} = entitle($para->{text}, $STD_HIGHLIGHT_IGNORES);
             }
-            if ($args{case} =~ /sentence(\s*)/i) {
+            elsif ($args{case} =~ /sentence(\s*)/i) {
                 my $trailer = $1;
                 $args{squeeze}=0 if $trailer && $trailer ne " ";
                 ensentence();
@@ -530,22 +538,26 @@ sub recase {
 my $alword = qr{(?:\pL|&[a-z]+;)(?:[\pL']|&[a-z]+;)*}i;
 
 sub entitle {
-    my $ignore = pop;
-    local *_ = \shift;
+    my ($text, $retitler_ref) = @_;
 
     # put into lowercase if on stop list, else titlecase
-    s{($alword)}
-     { $ignore && $ignore{lc $1} ? recase($1,'lower') : recase($1,'title') }gex;
+    $text =~ s{($alword)}
+              { $retitler_ref ? $retitler_ref->($1) : recase($1,'title') }gex;
 
-    s/^($alword) /recase($1,'title')/ex;  # last word always to cap
-    s/ ($alword)$/recase($1,'title')/ex;  # first word always to cap
+    if ($retitler_ref == $STD_HIGHLIGHT_IGNORES) {
+        # First and final words always capitalized...
+        $text =~ s/^($alword) /recase($1,'title')/ex;
+        $text =~ s/ ($alword)$/recase($1,'title')/ex;
 
-    # treat parethesized portion as a complete title
-    s/\( ($alword) /'('.recase($1,'title')/ex;
-    s/($alword) \) /recase($1,'title').')'/ex;
+        # treat parethesized portion as a complete title
+        $text =~ s/\( ($alword) /'('.recase($1,'title')/ex;
+        $text =~ s/($alword) \) /recase($1,'title').')'/ex;
 
-    # capitalize first word following colon or semi-colon
-    s/ ( [:;] \s+ ) ($alword) /$1 . recase($2,'title')/ex;
+        # capitalize first word following colon or semi-colon
+        $text =~ s/ ( [:;] \s+ ) ($alword) /$1 . recase($2,'title')/ex;
+    }
+
+    return $text;
 }
 
 sub inv($@) { my ($k, %inv)=shift; for(0..$#_) {$inv{$_[$_]}=$_*$k} %inv } 
@@ -860,7 +872,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.669002 of Text::Autoformat
+This document describes version 1.669003 of Text::Autoformat
 
 =head1 SYNOPSIS
 
@@ -907,6 +919,7 @@ This document describes version 1.669002 of Text::Autoformat
     $formatted = autoformat $rawtext, { case => 'sentence' };
     $formatted = autoformat $rawtext, { case => 'title' };
     $formatted = autoformat $rawtext, { case => 'highlight' };
+    $formatted = autoformat $rawtext, { case => \&my_case_func };
 
  # Selective reformatting
 
@@ -1333,7 +1346,7 @@ C<"autocentre"> argument false.
 
 The C<autoformat> subroutine can also optionally perform case
 conversions on the text it processes. The C<{case =E<gt> I<type>}>
-argument allows the user to specify five different conversions:
+argument allows the user to specify six different conversions:
 
 =over 4
 
@@ -1384,6 +1397,35 @@ This mode behaves like C<'title'> except that trivial words are not
 capitalized:
 
         'What I Did on my Summer Vacation in Monterey'
+
+=item C<sub{...}>
+
+If the argument for C<'case'> is a subroutine reference, that subroutine
+is applied to each word and the result replaces the word in the text.
+
+For example, to convert a string to hostage-case:
+
+    my $ransom_note = sub {
+        return join "",                    # ^  Reconcatenate
+               map {/[aeiou]/i ? lc : uc}  # |  uPPeR aND LoWeR each
+               split //,                   # |  Break into chars
+               shift;                      # |  Take argument
+    };
+
+    $text = autoformat($text, {case => $ransom_note });
+    # "FoR eXaMPLe, To CoNVeRT a STRiNG To HoSTaGe-CaSe:"
+
+Or to highlight particular words:
+
+    my @SPECIAL = qw( perl camel wall );
+    sub highlight_specials {
+        my ($word) = @_;
+        return $word ~~ @SPECIAL ? uc($word) : $word;
+    }
+
+    $text = autoformat($text, {case => \&highlight_specials});
+    # "It is easier for a CAMEL to pass through a WALL of PERL..."
+
 
 =back
 

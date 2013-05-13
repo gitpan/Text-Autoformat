@@ -182,3 +182,7 @@ Revision history for Text-Autoformat
 1.669002  Tue Jun 22 15:39:35 2010
 
     - Patched missing case in 'ignore' option handling (thanks Alan)
+
+
+1.669003  Mon May 13 18:53:47 2013
+
