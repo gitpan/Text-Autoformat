@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.669003';
+our $VERSION = '1.669004';
 
 require Exporter;
 
@@ -460,8 +460,9 @@ sub autoformat  # ($text, %args)
                     $tryformat, @hang,
                     $para->{text});
             $firsttext ||= $newtext;
-            $newtext =~ /\s*([^\n]*)$/;
-            $widow_okay = $para->{empty} || length($1) >= $args{widow};
+            (my $widow) = $newtext =~ /([^\n]*)$/;
+            $widow =~ s/^\s+//;
+            $widow_okay = $para->{empty} || length($widow) >= $args{widow};
             } until $widow_okay || ++$rightindent > $rightslack;
     
             $text .= $widow_okay ? $newtext : $firsttext;
@@ -872,7 +873,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.669003 of Text::Autoformat
+This document describes version 1.669004 of Text::Autoformat
 
 =head1 SYNOPSIS
 

@@ -186,3 +186,8 @@ Revision history for Text-Autoformat
 
 1.669003  Mon May 13 18:53:47 2013
 
+
+
+1.669004  Wed Jul 31 14:43:55 2013
+
+    - Tweaked widow handling to avoid a nasty edge case (thanks Michael!)
