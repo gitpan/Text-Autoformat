@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Text-Autoformat
-version:            1.669005
+version:            1.669006
 abstract:           Automatic text wrapping and reformatting
 author:
     - Damian Conway <DCONWAY@CPAN.org>

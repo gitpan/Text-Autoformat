@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.669005';
+our $VERSION = '1.669006';
 
 require Exporter;
 
@@ -160,8 +160,9 @@ sub autoformat  # ($text, %args)
     use Text::Tabs; $tabstop = $args{tabspace};
     @rawlines = expand(@rawlines);
 
-    # HANDLE QUOTING
+    # HANDLE QUOTING CHANGE
     my $quoter = exists $args{quoter} ? $args{quoter} : $QUOTER;
+    $quoter =~ s/<QUOTER>/$QUOTER/g;
 
     # PARSE EACH LINE
 
@@ -875,7 +876,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.669005 of Text::Autoformat
+This document describes version 1.669006 of Text::Autoformat
 
 =head1 SYNOPSIS
 
@@ -1237,6 +1238,14 @@ format lines such as:
 specify:
 
     autoformat($text, { quoter =E<gt> qr{//})
+
+Instead of completely replacing the existing set of quoters, you can
+I<extend> them by specifying a pattern that includes the metasequence
+C<< <QUOTER> >>, which is then replaced by the module's standard pattern
+for quoters. So, for example, to add C<//> to the set of existing quoters:
+
+    autoformat($text, { quoter =E<gt> qr{//|<QUOTER>})
+
 
 Block quotations present a different challenge. A typical formatter
 would render the following quotation:

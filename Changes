@@ -199,3 +199,9 @@ Revision history for Text-Autoformat
 
     - Added 'quoter' option to allow user to specify a regex
       to be used to recognize quoters (thanks Peter)
+
+
+1.669006  Sat Oct  4 07:32:33 2014
+
+    - Improved 'quoter' option to allow augmenting quoter regex,
+      rather than just replacing it (thanks Peter)
