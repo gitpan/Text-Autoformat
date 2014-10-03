@@ -2,7 +2,7 @@ package Text::Autoformat;
 
 use strict; use vars qw($VERSION @ISA @EXPORT @EXPORT_OK); use Carp;
 use 5.005;
-our $VERSION = '1.669004';
+our $VERSION = '1.669005';
 
 require Exporter;
 
@@ -94,9 +94,9 @@ sub ignore_headers { $_[0] && /$ignore_headers/ }
 
 # BITS OF A TEXT LINE
 
-my $quotechar = qq{[!#%=|:]};
+my $quotechar = qq{[!#%=|:;]};
 my $quotechunk = qq{(?:$quotechar(?![a-z])|(?:[a-z]\\w*)?>+)};
-my $quoter = qq{(?:(?i)(?:$quotechunk(?:[ \\t]*$quotechunk)*))};
+my $QUOTER = qq{(?:(?i)(?:$quotechunk(?:[ \\t]*$quotechunk)*))};
 
 my $separator = q/(?:[-_]{2,}|[=#*]{3,}|[+~]{4,})/;
 
@@ -160,6 +160,9 @@ sub autoformat  # ($text, %args)
     use Text::Tabs; $tabstop = $args{tabspace};
     @rawlines = expand(@rawlines);
 
+    # HANDLE QUOTING
+    my $quoter = exists $args{quoter} ? $args{quoter} : $QUOTER;
+
     # PARSE EACH LINE
 
     my $pre = 0;
@@ -208,7 +211,6 @@ sub autoformat  # ($text, %args)
 
     CHUNK: foreach my $chunk ( @chunks )
     {
-        $DB::single=1;
         next CHUNK if !$args{autocentre} || @$chunk < 2 || $chunk->[0]{hang};
         my @length;
         my $ave = 0;
@@ -873,7 +875,7 @@ Text::Autoformat - Automatic text wrapping and reformatting
 
 =head1 VERSION
 
-This document describes version 1.669004 of Text::Autoformat
+This document describes version 1.669005 of Text::Autoformat
 
 =head1 SYNOPSIS
 
@@ -1222,6 +1224,19 @@ For example:
 C<autoformat> recognizes the various quoting conventions used in this
 example and treats it as three paragraphs to be independently
 reformatted.
+
+You may also override the default set of recognized quoters by specifying
+a C<'quoter'> argument when calling C<autoformat()>. For example, to
+format lines such as:
+
+        // This is a comment
+        // in the standard C(++)
+        // comment-to-EOL
+        // format
+
+specify:
+
+    autoformat($text, { quoter =E<gt> qr{//})
 
 Block quotations present a different challenge. A typical formatter
 would render the following quotation:

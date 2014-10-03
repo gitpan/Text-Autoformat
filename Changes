@@ -191,3 +191,11 @@ Revision history for Text-Autoformat
 1.669004  Wed Jul 31 14:43:55 2013
 
     - Tweaked widow handling to avoid a nasty edge case (thanks Michael!)
+
+
+1.669005  Fri Oct  3 16:56:12 2014
+
+    - Added Lisp-style leading ; as a quoter (thanks Roland)
+
+    - Added 'quoter' option to allow user to specify a regex
+      to be used to recognize quoters (thanks Peter)
